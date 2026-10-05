@@ -1,52 +1,61 @@
-# Aurex v1 — Database Authentication
+# Aurex API
 
-Aurex backend foundation with:
-- Express
-- PostgreSQL-compatible database (works with Supabase Postgres)
-- bcrypt password hashing
-- JWT authentication
-- dotenv configuration
-
-## 1. Install
-
-```bash
-npm install
-```
-
-## 2. Configure
-
-Copy `.env.example` to `.env` and set:
-
-- `DATABASE_URL` — your PostgreSQL/Supabase connection string
-- `JWT_SECRET` — a long random secret
-
-Never commit `.env`.
-
-## 3. Create the database table
-
-Run `db/schema.sql` in your Supabase SQL Editor or PostgreSQL client.
-
-## 4. Start
-
-```bash
-npm run dev
-```
+Aurex v1 backend foundation with Node.js, Express, PostgreSQL/Supabase, bcrypt and JWT authentication.
 
 ## API
 
-- `GET /api/health`
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `GET /api/auth/me` — Bearer token required
+- `GET /api/health` — database connectivity health check
+- `POST /api/auth/register` — create a user
+- `POST /api/auth/login` — authenticate and receive a JWT
+- `GET /api/auth/me` — authenticated user (`Authorization: Bearer <token>` required)
+
+## Environment
+
+Copy `.env.example` to `.env` and set:
+
+```env
+PORT=3000
+DATABASE_URL=your_supabase_connection_string
+JWT_SECRET=your_long_random_secret
+JWT_EXPIRES_IN=1h
+DATABASE_SSL=true
+```
+
+Never commit `.env` or real secrets to GitHub.
+
+## Database
+
+Run `db/schema.sql` in Supabase SQL Editor/PostgreSQL. The API expects the `users` table used by the auth routes.
+
+## Run
+
+```bash
+npm install
+npm run dev
+```
+
+Production uses `npm start`.
+
+## Render deployment
+
+`render.yaml` configures the Aurex web service. Required Render environment variables are:
+
+- `DATABASE_URL` — Supabase PostgreSQL connection string
+- `JWT_SECRET` — long random JWT signing secret
+- `DATABASE_SSL=true`
+- `JWT_EXPIRES_IN=1h`
+- `NODE_ENV=production`
+
+After these are set, `/api/health` should return `ok: true` with `database: "connected"`.
 
 ## Authentication flow
 
-Client → register/login → PostgreSQL user lookup → bcrypt verification/hash → JWT → `Authorization: Bearer <token>` → JWT middleware → protected route.
+Client → register/login → PostgreSQL user lookup → bcrypt hash/verification → JWT → `Authorization: Bearer <token>` → JWT middleware → protected route.
 
-## Production TODO
+## Next production hardening
 
-- Add email verification and password reset.
-- Add rate limiting.
-- Add refresh-token/session rotation if long-lived sessions are required.
-- Consider HttpOnly secure cookies for browser sessions.
-- Add audit logging and monitoring.
+- Email verification and password reset
+- Rate limiting
+- Refresh-token/session rotation when long-lived sessions are needed
+- HttpOnly secure cookies for browser sessions where appropriate
+- Audit logging and monitoring
