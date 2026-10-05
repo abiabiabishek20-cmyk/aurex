@@ -1,0 +1,12 @@
+require('dotenv').config();
+const express = require('express');
+const authRoutes = require('./routes/auth');
+const { authMiddleware } = require('./middleware/auth');
+const app = express();
+const PORT = process.env.PORT || 3000;
+app.use(express.json());
+app.get('/api/health', (_req,res) => res.json({ok:true, service:'aurex-api'}));
+app.use('/api/auth', authRoutes);
+app.get('/api/auth/me', authMiddleware, (req,res) => res.json({user:req.user}));
+app.use((err,_req,res,_next)=>{ console.error(err); res.status(500).json({error:'Internal server error'}); });
+app.listen(PORT, ()=>console.log(`Aurex API running on http://localhost:${PORT}`));
