@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: aurex-api
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_SSL
+        value: "true"
+      - key: JWT_EXPIRES_IN
+        value: 1h
