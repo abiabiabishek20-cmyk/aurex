@@ -10,6 +10,7 @@ const { query } = require("./db");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const desktopSockets = new Map();
 
 app.use(express.json());
 
@@ -53,6 +54,14 @@ app.post("/api/desktop/ping", async (req, res) => {
        values ($1, $2, $3, 'ping', '{}'::jsonb)`,
       [id, device.id, device.user_id]
     );
+
+    const ws = desktopSockets.get(device.id);
+    if (ws && ws.readyState === 1) {
+      ws.send(JSON.stringify({
+        type: "command",
+        command: { id, command_type: "ping", payload: {} }
+      }));
+    }
 
     const deadline = Date.now() + 5000;
     while (Date.now() < deadline) {
@@ -157,6 +166,7 @@ desktopWss.on("connection", async (ws, request) => {
 
     ws.deviceId = device.id;
     ws.userId = device.user_id;
+    desktopSockets.set(device.id, ws);
 
     await query(
       "update desktop_devices set last_seen_at = now() where id = $1",
@@ -179,6 +189,7 @@ desktopWss.on("connection", async (ws, request) => {
             "update desktop_devices set last_seen_at = now() where id = $1",
             [device.id]
           );
+          await sendNextCommand(ws, device.id);
           return;
         }
 
@@ -205,6 +216,12 @@ desktopWss.on("connection", async (ws, request) => {
         }
       } catch (error) {
         console.error("Desktop websocket message error:", error);
+      }
+    });
+
+    ws.on("close", () => {
+      if (desktopSockets.get(device.id) === ws) {
+        desktopSockets.delete(device.id);
       }
     });
   } catch (error) {
