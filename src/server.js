@@ -24,6 +24,70 @@ app.get("/api/health", async (_req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+
+// Safe connection test for a paired desktop agent. The device token is read
+// from the local agent config by the caller and is never returned by this API.
+app.post("/api/desktop/ping", async (req, res) => {
+  try {
+    const token = String(req.headers["x-aurex-device-token"] || "").trim();
+    if (!token) {
+      return res.status(401).json({ error: "Missing device token" });
+    }
+
+    const deviceResult = await query(
+      `select id, user_id, name
+       from desktop_devices
+       where token_hash = $1
+       limit 1`,
+      [hashToken(token)]
+    );
+
+    const device = deviceResult.rows[0];
+    if (!device) {
+      return res.status(401).json({ error: "Invalid device token" });
+    }
+
+    const id = require("crypto").randomUUID();
+    await query(
+      `insert into desktop_commands (id, device_id, user_id, command_type, payload)
+       values ($1, $2, $3, 'ping', '{}'::jsonb)`,
+      [id, device.id, device.user_id]
+    );
+
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      const result = await query(
+        `select status, result
+         from desktop_commands
+         where id = $1 and device_id = $2
+         limit 1`,
+        [id, device.id]
+      );
+
+      const row = result.rows[0];
+      if (row && row.status !== "queued") {
+        return res.json({
+          ok: row.status === "completed",
+          device: { id: device.id, name: device.name },
+          command: { id, status: row.status, result: row.result || {} }
+        });
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    res.status(504).json({
+      ok: false,
+      device: { id: device.id, name: device.name },
+      command: { id, status: "queued" },
+      error: "Desktop agent did not respond within 5 seconds"
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Could not run desktop ping test" });
+  }
+});
+
 app.use("/api/desktop", desktopRoutes);
 
 app.get("/api/auth/me", authMiddleware, async (req, res) => {
