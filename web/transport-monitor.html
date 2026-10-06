@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aurex • Control Transport</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:#070b14;color:#eef2ff}.app{max-width:980px;margin:auto;padding:32px}.brand{font-size:28px;font-weight:800;margin-bottom:8px}.brand span{color:#8b5cf6}.muted{color:#8995ad}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:20px}.card{background:#0d1320;border:1px solid #20283a;border-radius:16px;padding:20px}.wide{grid-column:1/-1}h2,h3{margin-top:0}.value{font-size:20px;font-weight:700;margin:8px 0 14px}.btn{border:0;border-radius:10px;padding:11px 16px;background:#7c3aed;color:#fff;font-weight:700;cursor:pointer}.btn.secondary{background:#1b2435}.btn:disabled{opacity:.6}.pill{display:inline-flex;align-items:center;gap:8px;color:#aab4c8;font-size:14px}.dot{width:9px;height:9px;border-radius:50%;background:#64748b}.dot.on{background:#22c55e;box-shadow:0 0 10px #22c55e}.transport{background:#080d17;border:1px solid #20283a;border-radius:12px;padding:14px;white-space:pre-wrap;color:#b9c5dd;min-height:90px}.audit{margin-top:12px;background:#080d17;border:1px solid #20283a;border-radius:12px;padding:12px;max-height:260px;overflow:auto;font-size:13px;color:#9aa7bd}.audit div{padding:5px 0;border-bottom:1px solid #182132}.audit div:last-child{border-bottom:0}.note{margin-top:14px;padding:12px;border-radius:10px;background:#111827;border:1px solid #293548;color:#aab4c8;line-height:1.5}@media(max-width:700px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}.app{padding:18px}}
+</style>
+</head>
+<body>
+<main class="app">
+<div class="brand">AU<span>REX</span> • Control Transport</div>
+<div class="muted">Phase 4 — authenticated command transport monitor</div>
+<section class="grid">
+<div class="card"><h3>Device</h3><div id="device" class="value">Loading...</div><div id="seen" class="muted">Checking...</div></div>
+<div class="card"><h3>Transport</h3><div class="pill"><span id="dot" class="dot"></span><span id="transportState">Checking connection</span></div><div style="margin-top:14px"><button id="pingBtn" class="btn">Run Transport Ping</button></div></div>
+<div class="card wide"><h3>Command Lifecycle</h3><div id="lifecycle" class="transport">No command yet.</div><div class="note">This phase validates the authenticated Dashboard → API → paired Desktop Agent → API response path. It does not inject mouse or keyboard input.</div></div>
+<div class="card wide"><h3>Transport Audit</h3><div id="audit" class="audit"><div>Transport monitor ready.</div></div></div>
+</section>
+</main>
+<script>
+const API='https://aurex-api-cvpd.onrender.com';
+const token=localStorage.getItem('aurex_jwt');
+let device=null;
+const $=id=>document.getElementById(id);
+function headers(){return{Authorization:'Bearer '+token,'Content-Type':'application/json'}}
+async function api(path,opt={}){if(!token)throw new Error('Please sign in to Aurex Control first');const r=await fetch(API+path,{...opt,headers:{...headers(),...(opt.headers||{})}});const d=await r.json();if(!r.ok)throw new Error(d.error||'Request failed');return d}
+function audit(message){const row=document.createElement('div');row.textContent=new Date().toLocaleTimeString()+' • '+message;$('audit').prepend(row);while($('audit').children.length>20)$('audit').lastElementChild.remove()}
+async function load(){const d=await api('/api/desktop/devices');device=d.devices[0];if(!device){$('device').textContent='No paired device';$('transportState').textContent='No device';return}$('device').textContent=device.name;$('seen').textContent=device.last_seen_at?'Last seen: '+new Date(device.last_seen_at).toLocaleString():'Never seen';$('dot').classList.toggle('on',device.online);$('transportState').textContent=device.online?'Agent connected':'Agent offline';audit('Device state: '+(device.online?'connected':'offline'))}
+async function runPing(){if(!device)await load();if(!device)throw new Error('No paired device');$('pingBtn').disabled=true;$('pingBtn').textContent='Sending...';const lifecycle=[];try{lifecycle.push('1. QUEUED — command accepted by Aurex API');render(lifecycle);const q=await api('/api/desktop/commands',{method:'POST',body:JSON.stringify({deviceId:device.id,type:'ping',payload:{}})});lifecycle.push('2. DISPATCHED — command id: '+q.command.id);render(lifecycle);audit('Ping queued: '+q.command.id);let status='queued';for(let i=0;i<30;i++){const d=await api('/api/desktop/commands/'+q.command.id);status=d.command.status;if(status!=='queued'){lifecycle.push('3. '+status.toUpperCase()+' — desktop agent response received');if(d.command.result)lifecycle.push('4. RESULT — '+JSON.stringify(d.command.result));render(lifecycle);audit('Ping '+status+': '+q.command.id);return}await new Promise(r=>setTimeout(r,500))}throw new Error('Transport response timed out after 15 seconds')}catch(e){lifecycle.push('ERROR — '+e.message);render(lifecycle);audit('Transport error: '+e.message)}finally{$('pingBtn').disabled=false;$('pingBtn').textContent='Run Transport Ping';load().catch(()=>{})}}
+function render(lines){$('lifecycle').textContent=lines.join('\n')}
+$('pingBtn').onclick=runPing;
+load().catch(e=>{ $('transportState').textContent=e.message; audit('Load error: '+e.message) });
+</script>
+</body>
+</html>
