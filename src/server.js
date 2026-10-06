@@ -26,11 +26,18 @@ app.get("/api/health", async (_req, res) => {
 
 app.use("/api/auth", authRoutes);
 
-async function runDeviceTest(req, res, commandType) {
+async function runDeviceTest(req, res, commandType, payload = {}) {
   try {
     const token = String(req.headers["x-aurex-device-token"] || "").trim();
     if (!token) {
       return res.status(401).json({ error: "Missing device token" });
+    }
+
+    if (commandType === "open_url") {
+      const url = String(payload.url || "");
+      if (!/^https?:\/\//i.test(url)) {
+        return res.status(400).json({ error: "open_url requires an http(s) URL" });
+      }
     }
 
     const deviceResult = await query(
@@ -49,15 +56,15 @@ async function runDeviceTest(req, res, commandType) {
     const id = require("crypto").randomUUID();
     await query(
       `insert into desktop_commands (id, device_id, user_id, command_type, payload)
-       values ($1, $2, $3, $4, '{}'::jsonb)`,
-      [id, device.id, device.user_id, commandType]
+       values ($1, $2, $3, $4, $5::jsonb)`,
+      [id, device.id, device.user_id, commandType, JSON.stringify(payload)]
     );
 
     const ws = desktopSockets.get(device.id);
     if (ws && ws.readyState === 1) {
       ws.send(JSON.stringify({
         type: "command",
-        command: { id, command_type: commandType, payload: {} }
+        command: { id, command_type: commandType, payload }
       }));
     }
 
@@ -100,6 +107,12 @@ app.post("/api/desktop/ping", (req, res) => runDeviceTest(req, res, "ping"));
 
 // Safe system information test for a paired desktop agent.
 app.post("/api/desktop/system-info", (req, res) => runDeviceTest(req, res, "get_system_info"));
+
+// Safe URL-opening test for a paired desktop agent.
+app.post("/api/desktop/open-url", (req, res) => {
+  const url = String(req.body?.url || "");
+  return runDeviceTest(req, res, "open_url", { url });
+});
 
 app.use("/api/desktop", desktopRoutes);
 
