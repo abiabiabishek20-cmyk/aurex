@@ -6,51 +6,17 @@ const API_URL = String(process.env.AUREX_API_URL || "https://aurex-api-cvpd.onre
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
-function ask(question, hidden = false) {
-  return new Promise((resolve) => {
-    if (!hidden) {
-      rl.question(question, resolve);
-      return;
-    }
-
-    process.stdout.write(question);
-    const stdin = process.stdin;
-    const onData = (char) => {
-      char = char.toString();
-      if (char === "\n" || char === "\r" || char === "\u0004") {
-        stdin.setRawMode(false);
-        stdin.pause();
-        stdin.removeListener("data", onData);
-        process.stdout.write("\n");
-        resolve(answer);
-      }
-    };
-
-    let answer = "";
-    stdin.setRawMode(true);
-    stdin.resume();
-    stdin.on("data", (char) => {
-      char = char.toString();
-      if (char === "\n" || char === "\r" || char === "\u0004") {
-        stdin.setRawMode(false);
-        stdin.pause();
-        stdin.removeListener("data", onData);
-        process.stdout.write("\n");
-        resolve(answer);
-      } else {
-        answer += char;
-      }
-    });
-  });
+function ask(question) {
+  return new Promise((resolve) => rl.question(question, resolve));
 }
 
 async function main() {
   console.log("\nAurex Desktop Agent Pairing\n");
   console.log(`Server: ${API_URL}\n`);
 
-  const email = await ask("Aurex email: ");
-  const password = await ask("Aurex password: ", true);
-  const name = await ask("Device name [My Windows PC]: ") || "My Windows PC";
+  const email = (await ask("Aurex email: ")).trim();
+  const password = await ask("Aurex password: ");
+  const name = (await ask("Device name [My Windows PC]: ")).trim() || "My Windows PC";
   rl.close();
 
   const loginResponse = await fetch(`${API_URL}/api/auth/login`, {
