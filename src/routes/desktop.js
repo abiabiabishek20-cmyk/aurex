@@ -2,6 +2,7 @@ const express = require("express");
 const crypto = require("crypto");
 const { query } = require("../db");
 const { authMiddleware } = require("../middleware/auth");
+const { validateCommand } = require("../desktop/commands");
 
 const router = express.Router();
 const desktopSockets = new Map();
@@ -38,16 +39,15 @@ router.post("/commands", async (req, res) => {
   try {
     const deviceId = String(req.body.deviceId || "");
     const commandType = String(req.body.type || "");
-    const allowed = new Set(["ping", "get_system_info", "open_url", "capture_screenshot"]);
-    if (!deviceId || !allowed.has(commandType)) return res.status(400).json({ error: "Invalid device or command type" });
+    if (!deviceId) return res.status(400).json({ error: "Invalid device or command type" });
+
+    const validation = validateCommand(commandType, req.body.payload || {});
+    if (!validation.ok) return res.status(400).json({ error: validation.error });
 
     const device = await query("select id from desktop_devices where id = $1 and user_id = $2 limit 1", [deviceId, req.user.sub]);
     if (!device.rows[0]) return res.status(404).json({ error: "Desktop device not found" });
 
-    const payload = req.body.payload || {};
-    if (commandType === "open_url" && !/^https?:\/\//i.test(String(payload.url || ""))) return res.status(400).json({ error: "open_url requires an http(s) URL" });
-    if (commandType === "capture_screenshot" && Object.keys(payload).length) return res.status(400).json({ error: "capture_screenshot does not accept a payload" });
-
+    const payload = validation.payload;
     const id = crypto.randomUUID();
     await query(`insert into desktop_commands (id, device_id, user_id, command_type, payload) values ($1, $2, $3, $4, $5::jsonb)`, [id, deviceId, req.user.sub, commandType, JSON.stringify(payload)]);
     const delivered = sendCommandToDevice(deviceId, { id, command_type: commandType, payload });
