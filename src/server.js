@@ -26,9 +26,7 @@ app.get("/api/health", async (_req, res) => {
 
 app.use("/api/auth", authRoutes);
 
-// Safe connection test for a paired desktop agent. The device token is read
-// from the local agent config by the caller and is never returned by this API.
-app.post("/api/desktop/ping", async (req, res) => {
+async function runDeviceTest(req, res, commandType) {
   try {
     const token = String(req.headers["x-aurex-device-token"] || "").trim();
     if (!token) {
@@ -51,15 +49,15 @@ app.post("/api/desktop/ping", async (req, res) => {
     const id = require("crypto").randomUUID();
     await query(
       `insert into desktop_commands (id, device_id, user_id, command_type, payload)
-       values ($1, $2, $3, 'ping', '{}'::jsonb)`,
-      [id, device.id, device.user_id]
+       values ($1, $2, $3, $4, '{}'::jsonb)`,
+      [id, device.id, device.user_id, commandType]
     );
 
     const ws = desktopSockets.get(device.id);
     if (ws && ws.readyState === 1) {
       ws.send(JSON.stringify({
         type: "command",
-        command: { id, command_type: "ping", payload: {} }
+        command: { id, command_type: commandType, payload: {} }
       }));
     }
 
@@ -85,7 +83,7 @@ app.post("/api/desktop/ping", async (req, res) => {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
-    res.status(504).json({
+    return res.status(504).json({
       ok: false,
       device: { id: device.id, name: device.name },
       command: { id, status: "queued" },
@@ -93,9 +91,15 @@ app.post("/api/desktop/ping", async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Could not run desktop ping test" });
+    return res.status(500).json({ error: `Could not run desktop ${commandType} test` });
   }
-});
+}
+
+// Safe connection test for a paired desktop agent.
+app.post("/api/desktop/ping", (req, res) => runDeviceTest(req, res, "ping"));
+
+// Safe system information test for a paired desktop agent.
+app.post("/api/desktop/system-info", (req, res) => runDeviceTest(req, res, "get_system_info"));
 
 app.use("/api/desktop", desktopRoutes);
 
