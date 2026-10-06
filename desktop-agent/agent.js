@@ -44,6 +44,37 @@ function openUrl(url) {
   return { opened: true, url };
 }
 
+function captureScreenshot() {
+  if (process.platform !== "win32") {
+    throw new Error("Screenshot capture is currently supported on Windows only");
+  }
+
+  const script = `
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+$bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
+$bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
+$graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+$graphics.CopyFromScreen($bounds.X, $bounds.Y, 0, 0, $bitmap.Size)
+$stream = New-Object System.IO.MemoryStream
+$bitmap.Save($stream, [System.Drawing.Imaging.ImageFormat]::Jpeg)
+[Console]::Write([Convert]::ToBase64String($stream.ToArray()))
+$graphics.Dispose()
+$bitmap.Dispose()
+$stream.Dispose()
+`;
+
+  return new Promise((resolve, reject) => {
+    const encoded = Buffer.from(script, "utf16le").toString("base64");
+    execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded], { maxBuffer: 12 * 1024 * 1024 }, (error, stdout, stderr) => {
+      if (error) return reject(new Error(stderr.trim() || error.message));
+      const image = String(stdout || "").trim();
+      if (!image) return reject(new Error("Screenshot capture returned no image data"));
+      resolve({ mime_type: "image/jpeg", data_base64: image });
+    });
+  });
+}
+
 async function execute(command) {
   switch (command.command_type) {
     case "ping":
@@ -54,6 +85,9 @@ async function execute(command) {
 
     case "open_url":
       return openUrl(String(command.payload?.url || ""));
+
+    case "capture_screenshot":
+      return await captureScreenshot();
 
     default:
       throw new Error("Command type is not allowed by this agent");
