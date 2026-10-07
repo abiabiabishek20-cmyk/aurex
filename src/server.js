@@ -11,7 +11,8 @@ const {
   registerDesktopSocket,
   removeDesktopSocket,
   requeueStaleCommands,
-  dispatchNextQueuedCommand
+  dispatchNextQueuedCommand,
+  touchDesktopHeartbeat
 } = require("./routes/desktop");
 const { authMiddleware } = require("./middleware/auth");
 const { query } = require("./db");
@@ -26,6 +27,8 @@ app.use((req, res, next) => {
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  if (req.path.startsWith("/api/")) res.setHeader("Cache-Control", "no-store");
+  if (process.env.NODE_ENV === "production") res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   next();
 });
 app.use(express.json({ limit: "100kb" }));
@@ -83,9 +86,9 @@ async function runDeviceTest(req, res, commandType, payload = {}) {
   } catch (error) { console.error(error); return res.status(500).json({ error: `Could not run desktop ${commandType} test` }); }
 }
 
-app.post("/api/desktop/ping", (req, res) => runDeviceTest(req, res, "ping"));
-app.post("/api/desktop/system-info", (req, res) => runDeviceTest(req, res, "get_system_info"));
-app.post("/api/desktop/open-url", (req, res) => runDeviceTest(req, res, "open_url", { url: String(req.body?.url || "") }));
+app.post("/api/desktop/ping", authMiddleware, (req, res) => runDeviceTest(req, res, "ping"));
+app.post("/api/desktop/system-info", authMiddleware, (req, res) => runDeviceTest(req, res, "get_system_info"));
+app.post("/api/desktop/open-url", authMiddleware, (req, res) => runDeviceTest(req, res, "open_url", { url: String(req.body?.url || "") }));
 app.use("/api/desktop", desktopRoutes);
 
 app.get("/api/auth/me", authMiddleware, async (req, res) => {
@@ -95,7 +98,7 @@ app.get("/api/auth/me", authMiddleware, async (req, res) => {
 app.use((err, _req, res, _next) => { console.error(err); res.status(500).json({ error: "Internal server error" }); });
 
 const server = http.createServer(app);
-const desktopWss = new WebSocketServer({ server, path: "/desktop/ws" });
+const desktopWss = new WebSocketServer({ server, path: "/desktop/ws", maxPayload: 64 * 1024 });
 
 desktopWss.on("connection", async (ws, request) => {
   try {
@@ -126,6 +129,7 @@ desktopWss.on("connection", async (ws, request) => {
       try {
         const message = JSON.parse(raw.toString());
         if (message.type === "heartbeat") {
+          touchDesktopHeartbeat(device.id);
           await query("update desktop_devices set last_seen_at = now() where id = $1", [device.id]);
           await requeueStaleCommands(device.id);
           await dispatchNextQueuedCommand(device.id);
