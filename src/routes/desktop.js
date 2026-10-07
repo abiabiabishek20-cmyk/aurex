@@ -7,7 +7,6 @@ const { recordAudit } = require("../audit");
 
 const router = express.Router();
 const desktopSockets = new Map();
-const deviceHeartbeats = new Map();
 const deviceConnections = new Map();
 const commandRate = new Map();
 const HEARTBEAT_STALE_MS = 90_000;
@@ -30,6 +29,10 @@ setInterval(() => {
 }, RATE_WINDOW_MS).unref();
 
 function hashToken(token) { return crypto.createHash("sha256").update(token).digest("hex"); }
+function touchDesktopHeartbeat(deviceId) {
+  const connection = deviceConnections.get(deviceId);
+  if (connection) connection.heartbeatAt = new Date().toISOString();
+}
 function registerDesktopSocket(deviceId, ws) {
   desktopSockets.set(deviceId, ws);
   deviceConnections.set(deviceId, {
@@ -237,4 +240,4 @@ router.get("/commands/:id", async (req, res) => {
   } catch (error) { console.error(error); res.status(500).json({ error: "Could not read desktop command" }); }
 });
 
-module.exports = { router, hashToken, registerDesktopSocket, removeDesktopSocket, requeueStaleCommands, dispatchNextQueuedCommand };
+module.exports = { router, hashToken, registerDesktopSocket, removeDesktopSocket, touchDesktopHeartbeat, requeueStaleCommands, dispatchNextQueuedCommand };
