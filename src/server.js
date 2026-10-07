@@ -45,7 +45,10 @@ async function runDeviceTest(req, res, commandType, payload = {}) {
     const token = String(req.headers["x-aurex-device-token"] || "").trim();
     if (!token) return res.status(401).json({ error: "Missing device token" });
     if (commandType === "open_url" && !/^https?:\/\//i.test(String(payload.url || ""))) return res.status(400).json({ error: "open_url requires an http(s) URL" });
-    const deviceResult = await query(`select id, user_id, name from desktop_devices where token_hash = $1 limit 1`, [hashToken(token)]);
+    const deviceResult = await query(
+      `select id, user_id, name from desktop_devices where token_hash = $1 and user_id = $2 limit 1`,
+      [hashToken(token), req.user.sub]
+    );
     const device = deviceResult.rows[0];
     if (!device) return res.status(401).json({ error: "Invalid device token" });
     const id = require("crypto").randomUUID();
