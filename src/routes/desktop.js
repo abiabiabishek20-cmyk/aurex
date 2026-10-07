@@ -6,6 +6,24 @@ const { validateCommand } = require("../desktop/commands");
 
 const router = express.Router();
 const desktopSockets = new Map();
+const commandRate = new Map();
+const RATE_WINDOW_MS = 60_000;
+const RATE_LIMIT = 30;
+function checkCommandRate(userId) {
+  const now = Date.now();
+  const entry = commandRate.get(userId);
+  if (!entry || now - entry.startedAt >= RATE_WINDOW_MS) {
+    commandRate.set(userId, { startedAt: now, count: 1 });
+    return true;
+  }
+  if (entry.count >= RATE_LIMIT) return false;
+  entry.count += 1;
+  return true;
+}
+setInterval(() => {
+  const cutoff = Date.now() - RATE_WINDOW_MS;
+  for (const [userId, entry] of commandRate) if (entry.startedAt < cutoff) commandRate.delete(userId);
+}, RATE_WINDOW_MS).unref();
 
 function hashToken(token) { return crypto.createHash("sha256").update(token).digest("hex"); }
 function registerDesktopSocket(deviceId, ws) { desktopSockets.set(deviceId, ws); }
@@ -105,6 +123,7 @@ router.get("/commands", async (req, res) => {
 
 router.post("/commands", async (req, res) => {
   try {
+    if (!checkCommandRate(req.user.sub)) return res.status(429).json({ error: "Command rate limit exceeded", retry_after_seconds: 60 });
     const deviceId = String(req.body.deviceId || "");
     const commandType = String(req.body.type || "");
     if (!deviceId) return res.status(400).json({ error: "Invalid device or command type" });
