@@ -101,7 +101,7 @@ app.get("/api/auth/me", authMiddleware, async (req, res) => {
 app.use((err, _req, res, _next) => { console.error(err); res.status(500).json({ error: "Internal server error" }); });
 
 const server = http.createServer(app);
-const desktopWss = new WebSocketServer({ server, path: "/desktop/ws", maxPayload: 64 * 1024 });
+const desktopWss = new WebSocketServer({ server, path: "/desktop/ws", maxPayload: 8 * 1024 * 1024 });
 
 desktopWss.on("connection", async (ws, request) => {
   try {
@@ -127,6 +127,10 @@ desktopWss.on("connection", async (ws, request) => {
     ws.send(JSON.stringify({ type: "connected", device: { id: device.id, name: device.name } }));
     await requeueStaleCommands(device.id);
     await dispatchNextQueuedCommand(device.id);
+
+    ws.on("error", error => {
+      console.error("Desktop websocket error:", error);
+    });
 
     ws.on("message", async raw => {
       try {
