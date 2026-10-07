@@ -95,6 +95,62 @@ async function dispatchNextQueuedCommand(deviceId) {
   return true;
 }
 
+async function executeDesktopCommand(userId, deviceId, commandType, rawPayload = {}, timeoutMs = 7000) {
+  if (!checkCommandRate(userId)) {
+    return { ok: false, error: "Command rate limit exceeded", command: { status: "rate_limited" } };
+  }
+
+  const validation = validateCommand(commandType, rawPayload);
+  if (!validation.ok) return { ok: false, error: validation.error, command: { status: "invalid" } };
+
+  const deviceResult = await query(
+    "select id, name from desktop_devices where id = $1 and user_id = $2 limit 1",
+    [deviceId, userId]
+  );
+  const device = deviceResult.rows[0];
+  if (!device) return { ok: false, error: "Desktop device not found", command: { status: "not_found" } };
+
+  const id = crypto.randomUUID();
+  await query(
+    "insert into desktop_commands (id, device_id, user_id, command_type, payload) values ($1, $2, $3, $4, $5::jsonb)",
+    [id, deviceId, userId, commandType, JSON.stringify(validation.payload)]
+  );
+  await recordAudit({
+    userId,
+    deviceId,
+    commandId: id,
+    eventType: "command.created",
+    metadata: { command_type: commandType, source: "aurex_assistant" }
+  });
+
+  await requeueStaleCommands(deviceId);
+  await dispatchNextQueuedCommand(deviceId);
+
+  const deadline = Date.now() + Math.max(1000, Math.min(timeoutMs, 15000));
+  while (Date.now() < deadline) {
+    const result = await query(
+      "select id, command_type, status, result, created_at, completed_at from desktop_commands where id = $1 and device_id = $2 and user_id = $3 limit 1",
+      [id, deviceId, userId]
+    );
+    const row = result.rows[0];
+    if (row && row.status !== "queued" && row.status !== "dispatched") {
+      return {
+        ok: row.status === "completed",
+        device,
+        command: row
+      };
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
+  return {
+    ok: false,
+    device,
+    command: { id, command_type: commandType, status: "timeout" },
+    error: "Desktop agent did not respond within the timeout."
+  };
+}
+
 router.use(authMiddleware);
 
 router.post("/register", async (req, res) => {
@@ -240,4 +296,4 @@ router.get("/commands/:id", async (req, res) => {
   } catch (error) { console.error(error); res.status(500).json({ error: "Could not read desktop command" }); }
 });
 
-module.exports = { router, hashToken, registerDesktopSocket, removeDesktopSocket, touchDesktopHeartbeat, requeueStaleCommands, dispatchNextQueuedCommand };
+module.exports = { router, hashToken, registerDesktopSocket, removeDesktopSocket, touchDesktopHeartbeat, requeueStaleCommands, dispatchNextQueuedCommand, executeDesktopCommand };
