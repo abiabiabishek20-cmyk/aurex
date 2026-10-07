@@ -11,12 +11,12 @@
 <body>
 <main class="app">
 <div class="brand">AU<span>REX</span> • Control Transport</div>
-<div class="muted">Phase 4 — authenticated command transport monitor</div>
+<div class="muted">Phase 6 — reliable command transport & audit</div>
 <section class="grid">
 <div class="card"><h3>Device</h3><div id="device" class="value">Loading...</div><div id="seen" class="muted">Checking...</div></div>
 <div class="card"><h3>Transport</h3><div class="pill"><span id="dot" class="dot"></span><span id="transportState">Checking connection</span></div><div style="margin-top:14px"><button id="pingBtn" class="btn">Run Transport Ping</button></div></div>
 <div class="card wide"><h3>Command Lifecycle</h3><div id="lifecycle" class="transport">No command yet.</div><div class="note">This phase validates the authenticated Dashboard → API → paired Desktop Agent → API response path. It does not inject mouse or keyboard input.</div></div>
-<div class="card wide"><h3>Transport Audit</h3><div id="audit" class="audit"><div>Transport monitor ready.</div></div></div>
+<div class="card wide"><h3>Transport Audit</h3><div id="audit" class="audit"><div>Transport monitor ready.</div></div></div><div class="card wide"><h3>Recent Command History</h3><div id="history" class="audit"><div>Loading command history...</div></div></div>
 </section>
 </main>
 <script>
@@ -27,11 +27,14 @@ const $=id=>document.getElementById(id);
 function headers(){return{Authorization:'Bearer '+token,'Content-Type':'application/json'}}
 async function api(path,opt={}){if(!token)throw new Error('Please sign in to Aurex Control first');const r=await fetch(API+path,{...opt,headers:{...headers(),...(opt.headers||{})}});const d=await r.json();if(!r.ok)throw new Error(d.error||'Request failed');return d}
 function audit(message){const row=document.createElement('div');row.textContent=new Date().toLocaleTimeString()+' • '+message;$('audit').prepend(row);while($('audit').children.length>20)$('audit').lastElementChild.remove()}
+function renderHistory(commands){const box=$('history');box.innerHTML='';if(!commands.length){box.innerHTML='<div>No commands yet.</div>';return}commands.forEach(c=>{const row=document.createElement('div');const when=new Date(c.created_at).toLocaleString();row.textContent=when+' • '+c.command_type+' • '+c.status+' • '+c.id;box.appendChild(row)})}
+async function loadHistory(){try{const d=await api('/api/desktop/commands?limit=20');renderHistory(d.commands||[])}catch(e){$('history').textContent='History unavailable: '+e.message}}
 async function load(){const d=await api('/api/desktop/devices');device=d.devices[0];if(!device){$('device').textContent='No paired device';$('transportState').textContent='No device';return}$('device').textContent=device.name;$('seen').textContent=device.last_seen_at?'Last seen: '+new Date(device.last_seen_at).toLocaleString():'Never seen';$('dot').classList.toggle('on',device.online);$('transportState').textContent=device.online?'Agent connected':'Agent offline';audit('Device state: '+(device.online?'connected':'offline'))}
-async function runPing(){if(!device)await load();if(!device)throw new Error('No paired device');$('pingBtn').disabled=true;$('pingBtn').textContent='Sending...';const lifecycle=[];try{lifecycle.push('1. QUEUED — command accepted by Aurex API');render(lifecycle);const q=await api('/api/desktop/commands',{method:'POST',body:JSON.stringify({deviceId:device.id,type:'ping',payload:{}})});lifecycle.push('2. DISPATCHED — command id: '+q.command.id);render(lifecycle);audit('Ping queued: '+q.command.id);let status='queued';for(let i=0;i<30;i++){const d=await api('/api/desktop/commands/'+q.command.id);status=d.command.status;if(status!=='queued'){lifecycle.push('3. '+status.toUpperCase()+' — desktop agent response received');if(d.command.result)lifecycle.push('4. RESULT — '+JSON.stringify(d.command.result));render(lifecycle);audit('Ping '+status+': '+q.command.id);return}await new Promise(r=>setTimeout(r,500))}throw new Error('Transport response timed out after 15 seconds')}catch(e){lifecycle.push('ERROR — '+e.message);render(lifecycle);audit('Transport error: '+e.message)}finally{$('pingBtn').disabled=false;$('pingBtn').textContent='Run Transport Ping';load().catch(()=>{})}}
+async function runPing(){if(!device)await load();if(!device)throw new Error('No paired device');$('pingBtn').disabled=true;$('pingBtn').textContent='Sending...';const lifecycle=[];try{lifecycle.push('1. QUEUED — command accepted by Aurex API');render(lifecycle);const q=await api('/api/desktop/commands',{method:'POST',body:JSON.stringify({deviceId:device.id,type:'ping',payload:{}})});lifecycle.push('2. '+q.command.status.toUpperCase()+' — command id: '+q.command.id);render(lifecycle);audit('Ping queued: '+q.command.id);let status='queued';for(let i=0;i<30;i++){const d=await api('/api/desktop/commands/'+q.command.id);status=d.command.status;if(status!=='queued'){lifecycle.push('3. '+status.toUpperCase()+' — desktop agent response received');if(d.command.result)lifecycle.push('4. RESULT — '+JSON.stringify(d.command.result));render(lifecycle);audit('Ping '+status+': '+q.command.id);loadHistory().catch(()=>{});return}await new Promise(r=>setTimeout(r,500))}throw new Error('Transport response timed out after 15 seconds')}catch(e){lifecycle.push('ERROR — '+e.message);render(lifecycle);audit('Transport error: '+e.message);loadHistory().catch(()=>{})}finally{$('pingBtn').disabled=false;$('pingBtn').textContent='Run Transport Ping';load().catch(()=>{})}}
 function render(lines){$('lifecycle').textContent=lines.join('\n')}
 $('pingBtn').onclick=runPing;
 load().catch(e=>{ $('transportState').textContent=e.message; audit('Load error: '+e.message) });
+loadHistory().catch(()=>{});
 </script>
 </body>
 </html>
