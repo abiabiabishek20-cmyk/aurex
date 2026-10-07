@@ -3,6 +3,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const { query } = require("../db");
+const { recordAudit } = require("../audit");
 
 const router = express.Router();
 const authAttempts = new Map();
@@ -44,6 +45,7 @@ router.post("/register", async (req, res) => {
     const password = String(req.body.password || "");
 
     if (!email || password.length < 8) {
+      await recordAudit({ eventType: "auth.register.rejected", metadata: { reason: "invalid_input" } });
       return res.status(400).json({
         error: "Valid email and password of at least 8 characters are required"
       });
@@ -55,6 +57,7 @@ router.post("/register", async (req, res) => {
     );
 
     if (existing.rows[0]) {
+      await recordAudit({ eventType: "auth.register.rejected", metadata: { reason: "user_exists" } });
       return res.status(409).json({ error: "User already exists" });
     }
 
@@ -69,6 +72,7 @@ router.post("/register", async (req, res) => {
     );
 
     const user = result.rows[0];
+    await recordAudit({ userId: user.id, eventType: "auth.register.success" });
 
     res.status(201).json({
       user,
@@ -94,9 +98,11 @@ router.post("/login", async (req, res) => {
     const user = result.rows[0];
 
     if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+      await recordAudit({ eventType: "auth.login.failure", metadata: { reason: "invalid_credentials" } });
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
+    await recordAudit({ userId: user.id, eventType: "auth.login.success" });
     res.json({
       user: {
         id: user.id,
