@@ -15,6 +15,7 @@ const {
 } = require("./routes/desktop");
 const { authMiddleware } = require("./middleware/auth");
 const { query } = require("./db");
+const { ensureAuditTable, recordAudit } = require("./audit");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -46,6 +47,13 @@ async function runDeviceTest(req, res, commandType, payload = {}) {
     if (!device) return res.status(401).json({ error: "Invalid device token" });
     const id = require("crypto").randomUUID();
     await query(`insert into desktop_commands (id, device_id, user_id, command_type, payload) values ($1, $2, $3, $4, $5::jsonb)`, [id, device.id, device.user_id, commandType, JSON.stringify(payload)]);
+    await recordAudit({
+      userId: device.user_id,
+      deviceId: device.id,
+      commandId: id,
+      eventType: "command.created",
+      metadata: { command_type: commandType, source: "device_test" }
+    });
     await requeueStaleCommands(device.id);
     const ws = desktopSockets.get(device.id);
     if (ws && ws.readyState === 1) {
@@ -53,7 +61,16 @@ async function runDeviceTest(req, res, commandType, payload = {}) {
         "update desktop_commands set status = 'dispatched' where id = $1 and status = 'queued' returning id, command_type, payload",
         [id]
       );
-      if (claimed.rows[0]) ws.send(JSON.stringify({ type: "command", command: claimed.rows[0] }));
+      if (claimed.rows[0]) {
+        ws.send(JSON.stringify({ type: "command", command: claimed.rows[0] }));
+        await recordAudit({
+          userId: device.user_id,
+          deviceId: device.id,
+          commandId: id,
+          eventType: "command.dispatched",
+          metadata: { command_type: commandType, source: "device_test" }
+        });
+      }
     }
     const deadline = Date.now() + 5000;
     while (Date.now() < deadline) {
@@ -94,6 +111,12 @@ desktopWss.on("connection", async (ws, request) => {
     desktopSockets.set(device.id, ws);
     registerDesktopSocket(device.id, ws);
     await query("update desktop_devices set last_seen_at = now() where id = $1", [device.id]);
+    await recordAudit({
+      userId: device.user_id,
+      deviceId: device.id,
+      eventType: "device.connected",
+      metadata: { device_name: device.name }
+    });
 
     ws.send(JSON.stringify({ type: "connected", device: { id: device.id, name: device.name } }));
     await requeueStaleCommands(device.id);
@@ -110,12 +133,20 @@ desktopWss.on("connection", async (ws, request) => {
         }
 
         if (message.type === "result" && message.commandId) {
+          const commandStatus = message.ok ? "completed" : "failed";
           await query(
             `update desktop_commands
              set status = $1, result = $2::jsonb, completed_at = now()
              where id = $3 and device_id = $4 and user_id = $5 and status in ('dispatched', 'queued')`,
-            [message.ok ? "completed" : "failed", JSON.stringify(message.result || {}), message.commandId, device.id, device.user_id]
+            [commandStatus, JSON.stringify(message.result || {}), message.commandId, device.id, device.user_id]
           );
+          await recordAudit({
+            userId: device.user_id,
+            deviceId: device.id,
+            commandId: message.commandId,
+            eventType: `command.${commandStatus}`,
+            metadata: { command_type: message.commandType || "unknown" }
+          });
           await query("update desktop_devices set last_seen_at = now() where id = $1", [device.id]);
           await dispatchNextQueuedCommand(device.id);
         }
@@ -125,6 +156,12 @@ desktopWss.on("connection", async (ws, request) => {
     ws.on("close", () => {
       removeDesktopSocket(device.id, ws);
       if (desktopSockets.get(device.id) === ws) desktopSockets.delete(device.id);
+      recordAudit({
+        userId: device.user_id,
+        deviceId: device.id,
+        eventType: "device.disconnected",
+        metadata: { device_name: device.name }
+      });
     });
   } catch (error) {
     console.error("Desktop websocket connection error:", error);
@@ -132,4 +169,12 @@ desktopWss.on("connection", async (ws, request) => {
   }
 });
 
-server.listen(PORT, () => console.log(`Aurex API running on http://localhost:${PORT}`));
+async function startServer() {
+  await ensureAuditTable();
+  server.listen(PORT, () => console.log(`Aurex API running on http://localhost:${PORT}`));
+}
+
+startServer().catch(error => {
+  console.error("Aurex startup failed:", error);
+  process.exit(1);
+});
