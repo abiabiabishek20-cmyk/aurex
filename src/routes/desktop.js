@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const { query } = require("../db");
 const { authMiddleware } = require("../middleware/auth");
 const { validateCommand } = require("../desktop/commands");
+const { recordAudit } = require("../audit");
 
 const router = express.Router();
 const desktopSockets = new Map();
@@ -53,6 +54,12 @@ async function dispatchNextQueuedCommand(deviceId) {
   if (!claimed.rows[0] || ws.readyState !== 1) return false;
 
   ws.send(JSON.stringify({ type: "command", command: claimed.rows[0] }));
+  await recordAudit({
+    deviceId,
+    commandId: claimed.rows[0].id,
+    eventType: "command.dispatched",
+    metadata: { command_type: claimed.rows[0].command_type }
+  });
   return true;
 }
 
@@ -130,6 +137,24 @@ router.get("/diagnostics", async (req, res) => {
   }
 });
 
+router.get("/audit", async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit || "50", 10) || 50, 1), 100);
+    const result = await query(
+      `select id, event_type, device_id, command_id, metadata, created_at
+       from aurex_audit_events
+       where user_id = $1
+       order by created_at desc
+       limit $2`,
+      [req.user.sub, limit]
+    );
+    res.json({ events: result.rows });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Could not read audit events" });
+  }
+});
+
 router.get("/commands", async (req, res) => {
   try {
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit || "20", 10) || 20, 1), 50);
@@ -161,6 +186,13 @@ router.post("/commands", async (req, res) => {
     const payload = validation.payload;
     const id = crypto.randomUUID();
     await query(`insert into desktop_commands (id, device_id, user_id, command_type, payload) values ($1, $2, $3, $4, $5::jsonb)`, [id, deviceId, req.user.sub, commandType, JSON.stringify(payload)]);
+    await recordAudit({
+      userId: req.user.sub,
+      deviceId,
+      commandId: id,
+      eventType: "command.created",
+      metadata: { command_type: commandType }
+    });
 
     await requeueStaleCommands(deviceId);
     const delivered = await dispatchNextQueuedCommand(deviceId);
