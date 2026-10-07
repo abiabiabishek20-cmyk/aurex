@@ -11,12 +11,12 @@
 <body>
 <main class="app">
 <div class="brand">AU<span>REX</span> • Control Transport</div>
-<div class="muted">Phase 10 — agent diagnostics & capability visibility</div>
+<div class="muted">Phase 12 — structured audit & event logging</div>
 <section class="grid">
 <div class="card"><h3>Device</h3><div id="device" class="value">Loading...</div><div id="seen" class="muted">Checking...</div></div>
 <div class="card"><h3>Transport</h3><div class="pill"><span id="dot" class="dot"></span><span id="transportState">Checking connection</span></div><div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button id="pingBtn" class="btn">Run Transport Ping</button><button id="systemBtn" class="btn secondary">Get System Info</button></div></div>
 <div class="card wide"><h3>Device Health</h3><div id="health" class="transport">Loading health status...</div></div><div class="card wide"><h3>Diagnostics</h3><div id="diagnostics" class="transport">Loading diagnostics...</div></div><div class="card wide"><h3>Agent System Info</h3><div id="systemInfo" class="transport">No system-info request yet.</div></div><div class="card wide"><h3>Command Lifecycle</h3><div id="lifecycle" class="transport">No command yet.</div><div class="note">This phase validates the authenticated Dashboard → API → paired Desktop Agent → API response path. It does not inject mouse or keyboard input.</div></div>
-<div class="card wide"><h3>Transport Audit</h3><div id="audit" class="audit"><div>Transport monitor ready.</div></div></div><div class="card wide"><h3>Recent Command History</h3><div id="history" class="audit"><div>Loading command history...</div></div></div>
+<div class="card wide"><h3>Transport Audit</h3><div id="audit" class="audit"><div>Transport monitor ready.</div></div></div><div class="card wide"><h3>Server Event Audit</h3><div id="eventAudit" class="audit"><div>Loading server audit events...</div></div></div><div class="card wide"><h3>Recent Command History</h3><div id="history" class="audit"><div>Loading command history...</div></div></div>
 </section>
 </main>
 <script>
@@ -27,6 +27,26 @@ const $=id=>document.getElementById(id);
 function headers(){return{Authorization:'Bearer '+token,'Content-Type':'application/json'}}
 async function api(path,opt={}){if(!token)throw new Error('Please sign in to Aurex Control first');const r=await fetch(API+path,{...opt,headers:{...headers(),...(opt.headers||{})}});const d=await r.json();if(!r.ok)throw new Error(d.error||'Request failed');return d}
 function audit(message){const row=document.createElement('div');row.textContent=new Date().toLocaleTimeString()+' • '+message;$('audit').prepend(row);while($('audit').children.length>20)$('audit').lastElementChild.remove()}
+function renderEvents(events){
+  const box=$('eventAudit');
+  box.innerHTML='';
+  if(!events.length){box.innerHTML='<div>No audit events yet.</div>';return}
+  events.forEach(e=>{
+    const row=document.createElement('div');
+    const when=new Date(e.created_at).toLocaleString();
+    const meta=e.metadata&&Object.keys(e.metadata).length?' • '+JSON.stringify(e.metadata):'';
+    row.textContent=when+' • '+e.event_type+meta;
+    box.appendChild(row);
+  });
+}
+async function loadEventAudit(){
+  try{
+    const d=await api('/api/desktop/audit?limit=30');
+    renderEvents(d.events||[]);
+  }catch(e){
+    $('eventAudit').textContent='Audit unavailable: '+e.message;
+  }
+}
 function renderHistory(commands){const box=$('history');box.innerHTML='';if(!commands.length){box.innerHTML='<div>No commands yet.</div>';return}commands.forEach(c=>{const row=document.createElement('div');const when=new Date(c.created_at).toLocaleString();row.textContent=when+' • '+c.command_type+' • '+c.status+' • '+c.id;box.appendChild(row)})}
 async function loadHealth(){try{const d=await api('/api/desktop/status');const dev=d.device;$('health').textContent=dev?`Device: ${dev.name}\nOnline: ${dev.online}\nLast seen: ${dev.last_seen_at?new Date(dev.last_seen_at).toLocaleString():'Never'}\nCommands — queued: ${d.commands.queued}, dispatched: ${d.commands.dispatched}, completed: ${d.commands.completed}, failed: ${d.commands.failed}`:'No paired device'}catch(e){$('health').textContent='Health unavailable: '+e.message}}
 async function loadDiagnostics(){try{const d=await api('/api/desktop/diagnostics');const fail=d.recent_failures||[];const latest=d.latest_completed;$('diagnostics').textContent=`Recent failures: ${fail.length}\nLatest completed: ${latest?latest.command_type+' • '+new Date(latest.created_at).toLocaleString():'None'}\nChecked: ${new Date(d.checked_at).toLocaleString()}`;if(fail.length) $('diagnostics').textContent+='\n\n'+fail.map(x=>x.command_type+' • '+x.status+' • '+new Date(x.created_at).toLocaleString()).join('\n')}catch(e){$('diagnostics').textContent='Diagnostics unavailable: '+e.message}}
@@ -39,6 +59,8 @@ function render(lines){$('lifecycle').textContent=lines.join('\n')}
 $('pingBtn').onclick=runPing;
 load().catch(e=>{ $('transportState').textContent=e.message; audit('Load error: '+e.message) });
 loadHistory().catch(()=>{});
+loadEventAudit().catch(()=>{});
+setInterval(()=>{loadHealth().catch(()=>{});loadDiagnostics().catch(()=>{});loadHistory().catch(()=>{});loadEventAudit().catch(()=>{});load().catch(()=>{})},5000);
 </script>
 </body>
 </html>
