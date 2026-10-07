@@ -147,12 +147,19 @@ desktopWss.on("connection", async (ws, request) => {
 
         if (message.type === "result" && message.commandId) {
           const commandStatus = message.ok ? "completed" : "failed";
-          await query(
+          const updated = await query(
             `update desktop_commands
              set status = $1, result = $2::jsonb, completed_at = now()
-             where id = $3 and device_id = $4 and user_id = $5 and status in ('dispatched', 'queued')`,
-            [commandStatus, JSON.stringify(message.result || {}), message.commandId, device.id, device.user_id]
+             where id = $3 and device_id = $4 and user_id = $5
+               and status in ('dispatched', 'queued')
+               and ($6::text is null or command_type = $6)
+             returning id`,
+            [commandStatus, JSON.stringify(message.result || {}), message.commandId, device.id, device.user_id, message.commandType ? String(message.commandType) : null]
           );
+          if (!updated.rows[0]) {
+            console.warn("Ignored unmatched desktop command result", { deviceId: device.id, commandId: message.commandId });
+            return;
+          }
           await recordAudit({
             userId: device.user_id,
             deviceId: device.id,
