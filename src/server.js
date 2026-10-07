@@ -19,11 +19,19 @@ const { query } = require("./db");
 const app = express();
 const PORT = process.env.PORT || 3000;
 const desktopSockets = new Map();
-app.use(express.json());
+app.disable("x-powered-by");
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  next();
+});
+app.use(express.json({ limit: "100kb" }));
 app.use(express.static(path.join(__dirname, "../web")));
 
 app.get("/api/health", async (_req, res) => {
-  try { await query("select 1"); res.json({ ok: true, service: "aurex-api", database: "connected" }); }
+  try { await query("select 1"); res.json({ ok: true, service: "aurex-api", database: "connected", uptime_seconds: Math.floor(process.uptime()) }); }
   catch (error) { console.error(error); res.status(503).json({ ok: false, service: "aurex-api", database: "unavailable" }); }
 });
 app.use("/api/auth", authRoutes);
