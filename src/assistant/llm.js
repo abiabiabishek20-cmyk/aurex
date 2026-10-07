@@ -1,5 +1,6 @@
 const OPENAI_URL = "https://api.openai.com/v1/responses";
 const { runAssistantTool, TOOL_DEFINITIONS } = require("./tools");
+const { personaInstructions } = require("./persona");
 
 const SYSTEM_INSTRUCTIONS = `
 You are Aurex, a personal AI assistant for the authenticated owner.
