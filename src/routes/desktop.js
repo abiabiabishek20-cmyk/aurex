@@ -10,10 +10,32 @@ const desktopSockets = new Map();
 function hashToken(token) { return crypto.createHash("sha256").update(token).digest("hex"); }
 function registerDesktopSocket(deviceId, ws) { desktopSockets.set(deviceId, ws); }
 function removeDesktopSocket(deviceId, ws) { if (desktopSockets.get(deviceId) === ws) desktopSockets.delete(deviceId); }
-function sendCommandToDevice(deviceId, command) {
+
+async function requeueStaleCommands(deviceId) {
+  await query(
+    "update desktop_commands set status = 'queued' where device_id = $1 and status = 'dispatched' and created_at < now() - interval '60 seconds'",
+    [deviceId]
+  );
+}
+
+async function dispatchNextQueuedCommand(deviceId) {
   const ws = desktopSockets.get(deviceId);
-  if (ws && ws.readyState === 1) { ws.send(JSON.stringify({ type: "command", command })); return true; }
-  return false;
+  if (!ws || ws.readyState !== 1) return false;
+
+  const queued = await query(
+    "select id from desktop_commands where device_id = $1 and status = 'queued' order by created_at asc limit 1",
+    [deviceId]
+  );
+  if (!queued.rows[0]) return false;
+
+  const claimed = await query(
+    "update desktop_commands set status = 'dispatched' where id = $1 and device_id = $2 and status = 'queued' returning id, command_type, payload",
+    [queued.rows[0].id, deviceId]
+  );
+  if (!claimed.rows[0] || ws.readyState !== 1) return false;
+
+  ws.send(JSON.stringify({ type: "command", command: claimed.rows[0] }));
+  return true;
 }
 
 router.use(authMiddleware);
@@ -35,6 +57,21 @@ router.get("/devices", async (req, res) => {
   } catch (error) { console.error(error); res.status(500).json({ error: "Could not list desktop devices" }); }
 });
 
+router.get("/commands", async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit || "20", 10) || 20, 1), 50);
+    const result = await query(
+      `select id, device_id, command_type, status, result, created_at, completed_at
+       from desktop_commands
+       where user_id = $1
+       order by created_at desc
+       limit $2`,
+      [req.user.sub, limit]
+    );
+    res.json({ commands: result.rows });
+  } catch (error) { console.error(error); res.status(500).json({ error: "Could not read desktop command audit" }); }
+});
+
 router.post("/commands", async (req, res) => {
   try {
     const deviceId = String(req.body.deviceId || "");
@@ -50,8 +87,10 @@ router.post("/commands", async (req, res) => {
     const payload = validation.payload;
     const id = crypto.randomUUID();
     await query(`insert into desktop_commands (id, device_id, user_id, command_type, payload) values ($1, $2, $3, $4, $5::jsonb)`, [id, deviceId, req.user.sub, commandType, JSON.stringify(payload)]);
-    const delivered = sendCommandToDevice(deviceId, { id, command_type: commandType, payload });
-    res.status(202).json({ command: { id, type: commandType, status: "queued", delivered } });
+
+    await requeueStaleCommands(deviceId);
+    const delivered = await dispatchNextQueuedCommand(deviceId);
+    res.status(202).json({ command: { id, type: commandType, status: delivered ? "dispatched" : "queued", delivered } });
   } catch (error) { console.error(error); res.status(500).json({ error: "Could not queue desktop command" }); }
 });
 
@@ -63,4 +102,4 @@ router.get("/commands/:id", async (req, res) => {
   } catch (error) { console.error(error); res.status(500).json({ error: "Could not read desktop command" }); }
 });
 
-module.exports = { router, hashToken, registerDesktopSocket, removeDesktopSocket };
+module.exports = { router, hashToken, registerDesktopSocket, removeDesktopSocket, requeueStaleCommands, dispatchNextQueuedCommand };
