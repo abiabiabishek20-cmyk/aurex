@@ -30,7 +30,7 @@ router.post("/confirm", async (req, res) => {
     if (!actionId) return res.status(400).json({ error: "action_id is required" });
     const action = await consumePendingAction(req.user.sub, actionId);
     if (!action) return res.status(404).json({ error: "Action not found, expired, or already used" });
-    const result = await runAssistantTool({ userId: req.user.sub, conversationId: action.conversation_id, name: action.tool_name, args: action.arguments });
+    const result = await runAssistantTool({ userId: req.user.sub, conversationId: action.conversation_id, name: action.tool_name, args: action.arguments, confirmed: true });
     if (result.confirmation_required) return res.status(409).json({ error: "Action still requires confirmation" });
     const reply = result.ok ? "Done partner. The confirmed action completed successfully." : `I couldn't complete that action: ${result.message || "unknown error"}`;
     await addMessage(req.user.sub, action.conversation_id, "assistant", reply, { confirmed_action: action.tool_name, action_id: action.id, ok: result.ok });
