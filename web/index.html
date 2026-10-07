@@ -9,7 +9,7 @@ function prepareBrainAction(message,intent){
   if(intent==='get_system_info') return {type:'get_system_info',payload:{}};
   if(intent==='capture_screenshot') return {type:'capture_screenshot',payload:{}};
   if(intent==='open_url'){
-    const m=message.match(/https?:\\/\\/[^\\s]+/i);
+    const m=message.match(/https?:\/\/[^\s]+/i);
     const url=m?m[0]:(/google/i.test(t)?'https://www.google.com':null);
     return url?{type:'open_url',payload:{url}}:null;
   }
