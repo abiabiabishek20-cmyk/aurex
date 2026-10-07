@@ -118,6 +118,7 @@ function connect() {
         ws.send(JSON.stringify({
           type: "result",
           commandId: command.id,
+          commandType: command.command_type,
           ok: true,
           result
         }));
@@ -125,6 +126,7 @@ function connect() {
         ws.send(JSON.stringify({
           type: "result",
           commandId: command.id,
+          commandType: command.command_type,
           ok: false,
           result: { error: error.message }
         }));
@@ -138,7 +140,7 @@ function connect() {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: "heartbeat" }));
     }
-  }, 30000);
+  }, 15000);
 
   ws.on("close", () => {
     clearInterval(heartbeat);
