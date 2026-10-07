@@ -57,6 +57,37 @@ router.get("/devices", async (req, res) => {
   } catch (error) { console.error(error); res.status(500).json({ error: "Could not list desktop devices" }); }
 });
 
+router.get("/status", async (req, res) => {
+  try {
+    const deviceResult = await query(
+      `select id, name, last_seen_at, created_at
+       from desktop_devices
+       where user_id = $1
+       order by created_at desc
+       limit 1`,
+      [req.user.sub]
+    );
+    const device = deviceResult.rows[0] || null;
+    const counts = await query(
+      `select status, count(*)::int as count
+       from desktop_commands
+       where user_id = $1
+       group by status`,
+      [req.user.sub]
+    );
+    const summary = { queued: 0, dispatched: 0, completed: 0, failed: 0 };
+    for (const row of counts.rows) summary[row.status] = row.count;
+    res.json({
+      device: device ? { ...device, online: desktopSockets.has(device.id) } : null,
+      commands: summary,
+      generated_at: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Could not read desktop status" });
+  }
+});
+
 router.get("/commands", async (req, res) => {
   try {
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit || "20", 10) || 20, 1), 50);
