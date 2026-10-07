@@ -16,6 +16,7 @@ const {
   touchDesktopHeartbeat
 } = require("./routes/desktop");
 const { authMiddleware } = require("./middleware/auth");
+const { validateCommand } = require("./desktop/commands");
 const { query } = require("./db");
 const { ensureAuditTable, recordAudit } = require("./audit");
 
@@ -93,7 +94,7 @@ async function runDeviceTest(req, res, commandType, payload = {}) {
 
 app.post("/api/desktop/ping", authMiddleware, (req, res) => runDeviceTest(req, res, "ping"));
 app.post("/api/desktop/system-info", authMiddleware, (req, res) => runDeviceTest(req, res, "get_system_info"));
-app.post("/api/desktop/open-url", authMiddleware, (req, res) => runDeviceTest(req, res, "open_url", { url: String(req.body?.url || "") }));
+undefined
 app.use("/api/desktop", desktopRoutes);
 
 app.get("/api/auth/me", authMiddleware, async (req, res) => {
