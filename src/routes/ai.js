@@ -32,9 +32,9 @@ router.post("/chat", async (req, res) => {
     if (result.intent === "greeting") {
       reply = "Vanakkam partner 👋 Naan Aurex. Device status, system info, screenshot, ping, and safe desktop actions-ku help panna ready.";
     } else if (result.intent === "device_status") {
-      const d = await query("select id, name, last_seen_at, heartbeat_at from desktop_devices where user_id = $1 order by created_at desc limit 1", [req.user.sub]);
+      const d = await query("select id, name, last_seen_at from desktop_devices where user_id = $1 order by created_at desc limit 1", [req.user.sub]);
       if (!d.rows[0]) reply = "No paired desktop device found.";
-      else { const age = d.rows[0].heartbeat_at ? Date.now() - new Date(d.rows[0].heartbeat_at).getTime() : Infinity; const online = age <= 90000; reply = `Paired device: ${d.rows[0].name}. Status: ${online ? "Online 🟢" : "Offline 🔴"}. Last seen: ${d.rows[0].last_seen_at ? new Date(d.rows[0].last_seen_at).toLocaleString() : "never"}.`; }
+      else { const age = d.rows[0].last_seen_at ? Date.now() - new Date(d.rows[0].last_seen_at).getTime() : Infinity; const online = age <= 90000; reply = `Paired device: ${d.rows[0].name}. Status: ${online ? "Online 🟢" : "Offline 🔴"}. Last seen: ${d.rows[0].last_seen_at ? new Date(d.rows[0].last_seen_at).toLocaleString() : "never"}.`; }
     } else if (result.intent === "unknown") {
       reply = "Puriyuthu partner, but that request is not enabled yet. Try: “en PC online ah?”, “en system la evlo RAM?”, “en screen kaatu”, or “Google open pannu”.";
     } else {
