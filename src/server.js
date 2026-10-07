@@ -5,6 +5,7 @@ const http = require("http");
 const express = require("express");
 const { WebSocketServer } = require("ws");
 const authRoutes = require("./routes/auth");
+const aiRoutes = require("./routes/ai");
 const {
   router: desktopRoutes,
   hashToken,
@@ -39,6 +40,7 @@ app.get("/api/health", async (_req, res) => {
   catch (error) { console.error(error); res.status(503).json({ ok: false, service: "aurex-api", database: "unavailable" }); }
 });
 app.use("/api/auth", authRoutes);
+app.use("/api/ai", aiRoutes);
 
 async function runDeviceTest(req, res, commandType, payload = {}) {
   try {
