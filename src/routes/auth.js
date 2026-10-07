@@ -5,17 +5,41 @@ const crypto = require("crypto");
 const { query } = require("../db");
 
 const router = express.Router();
+const authAttempts = new Map();
+const WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_LIMIT = 10;
+const REGISTER_LIMIT = 5;
+function clientKey(req) {
+  return String(req.ip || req.headers["x-forwarded-for"] || "unknown").split(",")[0].trim();
+}
+function allowAuth(req, action, limit) {
+  const key = action + ":" + clientKey(req);
+  const now = Date.now();
+  const entry = authAttempts.get(key);
+  if (!entry || now - entry.startedAt >= WINDOW_MS) {
+    authAttempts.set(key, { startedAt: now, count: 1 });
+    return true;
+  }
+  if (entry.count >= limit) return false;
+  entry.count += 1;
+  return true;
+}
+setInterval(() => {
+  const cutoff = Date.now() - WINDOW_MS;
+  for (const [key, entry] of authAttempts) if (entry.startedAt < cutoff) authAttempts.delete(key);
+}, WINDOW_MS).unref();
 
 function signToken(user) {
   return jwt.sign(
     { sub: user.id, email: user.email },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || "1h" }
+    { expiresIn: process.env.JWT_EXPIRES_IN || "1h", issuer: "aurex-api", audience: "aurex-control" }
   );
 }
 
 router.post("/register", async (req, res) => {
   try {
+    if (!allowAuth(req, "register", REGISTER_LIMIT)) return res.status(429).json({ error: "Registration rate limit exceeded", retry_after_seconds: 900 });
     const email = String(req.body.email || "").trim().toLowerCase();
     const password = String(req.body.password || "");
 
@@ -58,6 +82,7 @@ router.post("/register", async (req, res) => {
 
 router.post("/login", async (req, res) => {
   try {
+    if (!allowAuth(req, "login", LOGIN_LIMIT)) return res.status(429).json({ error: "Login rate limit exceeded", retry_after_seconds: 900 });
     const email = String(req.body.email || "").trim().toLowerCase();
     const password = String(req.body.password || "");
 
