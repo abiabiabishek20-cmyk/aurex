@@ -106,6 +106,30 @@ router.get("/status", async (req, res) => {
   }
 });
 
+router.get("/diagnostics", async (req, res) => {
+  try {
+    const result = await query(
+      `select id, command_type, status, result, created_at, completed_at
+       from desktop_commands
+       where user_id = $1
+       order by created_at desc
+       limit 20`,
+      [req.user.sub]
+    );
+    const recent = result.rows;
+    const failed = recent.filter(row => row.status === "failed").slice(0, 5);
+    const latestCompleted = recent.find(row => row.status === "completed") || null;
+    res.json({
+      recent_failures: failed,
+      latest_completed: latestCompleted,
+      checked_at: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Could not read desktop diagnostics" });
+  }
+});
+
 router.get("/commands", async (req, res) => {
   try {
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit || "20", 10) || 20, 1), 50);
