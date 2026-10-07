@@ -35,7 +35,7 @@ function openUrl(url) {
   }
 
   if (process.platform === "win32") {
-    execFile("cmd.exe", ["/c", "start", "", url]);
+    execFile("explorer.exe", [url]);
     return { opened: true, url };
   }
 
