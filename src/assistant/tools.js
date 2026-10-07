@@ -21,7 +21,7 @@ async function latestDevice(userId) {
   const result = await query("select id, name, last_seen_at from desktop_devices where user_id = $1 order by created_at desc limit 1", [userId]);
   return result.rows[0] || null;
 }
-async function runAssistantTool({ userId, conversationId, name, args }) {
+async function runAssistantTool({ userId, conversationId, name, args, confirmed = false }) {
   if (name === "get_pc_status") {
     const device = await latestDevice(userId);
     if (!device) return { ok: false, message: "No paired desktop device found." };
@@ -31,8 +31,14 @@ async function runAssistantTool({ userId, conversationId, name, args }) {
   }
   if (name === "open_url_on_pc") {
     const url = cleanUrl(args?.url);
-    const actionId = await createPendingAction(userId, conversationId, name, { url });
-    return { ok: true, confirmation_required: true, action_id: actionId, action: { tool: name, url, expires_in_seconds: 300 }, message: "Opening a website changes the user's browser state. Ask the user for explicit confirmation before executing this action." };
+    if (!confirmed) {
+      const actionId = await createPendingAction(userId, conversationId, name, { url });
+      return { ok: true, confirmation_required: true, action_id: actionId, action: { tool: name, url, expires_in_seconds: 300 }, message: "Opening a website changes the user's browser state. Ask the user for explicit confirmation before executing this action." };
+    }
+    const device = await latestDevice(userId);
+    if (!device) return { ok: false, message: "No paired desktop device found." };
+    const result = await executeDesktopCommand(userId, device.id, "open_url", { url }, 7000);
+    return { ok: result.ok, device: result.device, command: result.command, message: result.ok ? "Website opened on the PC." : (result.error || "Could not open the website.") };
   }
   const device = await latestDevice(userId);
   if (!device) return { ok: false, message: "No paired desktop device found." };
