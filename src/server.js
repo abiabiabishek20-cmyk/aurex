@@ -6,6 +6,7 @@ const express = require("express");
 const { WebSocketServer } = require("ws");
 const authRoutes = require("./routes/auth");
 const aiRoutes = require("./routes/ai");
+const assistantRoutes = require("./routes/assistant");
 const {
   router: desktopRoutes,
   hashToken,
@@ -19,6 +20,7 @@ const { authMiddleware } = require("./middleware/auth");
 const { validateCommand } = require("./desktop/commands");
 const { query } = require("./db");
 const { ensureAuditTable, recordAudit } = require("./audit");
+const { ensureAssistantTables } = require("./assistant/store");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -42,6 +44,7 @@ app.get("/api/health", async (_req, res) => {
 });
 app.use("/api/auth", authRoutes);
 app.use("/api/ai", aiRoutes);
+app.use("/api/assistant", assistantRoutes);
 
 async function runDeviceTest(req, res, commandType, payload = {}) {
   try {
@@ -192,6 +195,7 @@ desktopWss.on("connection", async (ws, request) => {
 
 async function startServer() {
   await ensureAuditTable();
+  await ensureAssistantTables();
   server.listen(PORT, () => console.log(`Aurex API running on http://localhost:${PORT}`));
 }
 
