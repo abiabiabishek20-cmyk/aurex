@@ -7,7 +7,10 @@ const { recordAudit } = require("../audit");
 
 const router = express.Router();
 const desktopSockets = new Map();
+const deviceHeartbeats = new Map();
+const deviceConnections = new Map();
 const commandRate = new Map();
+const HEARTBEAT_STALE_MS = 90_000;
 const RATE_WINDOW_MS = 60_000;
 const RATE_LIMIT = 30;
 function checkCommandRate(userId) {
@@ -27,8 +30,34 @@ setInterval(() => {
 }, RATE_WINDOW_MS).unref();
 
 function hashToken(token) { return crypto.createHash("sha256").update(token).digest("hex"); }
-function registerDesktopSocket(deviceId, ws) { desktopSockets.set(deviceId, ws); }
-function removeDesktopSocket(deviceId, ws) { if (desktopSockets.get(deviceId) === ws) desktopSockets.delete(deviceId); }
+function registerDesktopSocket(deviceId, ws) {
+  desktopSockets.set(deviceId, ws);
+  deviceConnections.set(deviceId, {
+    connectedAt: new Date().toISOString(),
+    heartbeatAt: new Date().toISOString()
+  });
+}
+function removeDesktopSocket(deviceId, ws) {
+  if (desktopSockets.get(deviceId) === ws) {
+    desktopSockets.delete(deviceId);
+    deviceConnections.delete(deviceId);
+  }
+}
+function lifecycleForDevice(device) {
+  const connection = deviceConnections.get(device.id);
+  const lastSeenMs = device.last_seen_at ? Date.now() - new Date(device.last_seen_at).getTime() : Infinity;
+  const heartbeatMs = connection ? Date.now() - new Date(connection.heartbeatAt).getTime() : Infinity;
+  const socketOnline = desktopSockets.has(device.id);
+  const state = !socketOnline ? "offline" : heartbeatMs > HEARTBEAT_STALE_MS ? "degraded" : "online";
+  return {
+    state,
+    online: state === "online",
+    heartbeat_stale: socketOnline && heartbeatMs > HEARTBEAT_STALE_MS,
+    last_seen_age_seconds: Number.isFinite(lastSeenMs) ? Math.max(0, Math.floor(lastSeenMs / 1000)) : null,
+    heartbeat_age_seconds: Number.isFinite(heartbeatMs) ? Math.max(0, Math.floor(heartbeatMs / 1000)) : null,
+    connected_at: connection?.connectedAt || null
+  };
+}
 
 async function requeueStaleCommands(deviceId) {
   await query(
@@ -78,7 +107,7 @@ router.post("/register", async (req, res) => {
 router.get("/devices", async (req, res) => {
   try {
     const result = await query(`select id, name, last_seen_at, created_at from desktop_devices where user_id = $1 order by created_at desc`, [req.user.sub]);
-    res.json({ devices: result.rows.map(device => ({ ...device, online: desktopSockets.has(device.id) })) });
+    res.json({ devices: result.rows.map(device => ({ ...device, ...lifecycleForDevice(device) })) });
   } catch (error) { console.error(error); res.status(500).json({ error: "Could not list desktop devices" }); }
 });
 
@@ -103,7 +132,7 @@ router.get("/status", async (req, res) => {
     const summary = { queued: 0, dispatched: 0, completed: 0, failed: 0 };
     for (const row of counts.rows) summary[row.status] = row.count;
     res.json({
-      device: device ? { ...device, online: desktopSockets.has(device.id) } : null,
+      device: device ? { ...device, ...lifecycleForDevice(device) } : null,
       commands: summary,
       generated_at: new Date().toISOString()
     });
