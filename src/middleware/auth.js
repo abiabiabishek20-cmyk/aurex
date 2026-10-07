@@ -9,7 +9,7 @@ function authMiddleware(req, res, next) {
   }
 
   try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = jwt.verify(token, process.env.JWT_SECRET, { issuer: "aurex-api", audience: "aurex-control" });
     next();
   } catch {
     return res.status(401).json({ error: "Invalid or expired token" });
