@@ -7,6 +7,7 @@ const { WebSocketServer } = require("ws");
 const authRoutes = require("./routes/auth");
 const aiRoutes = require("./routes/ai");
 const assistantRoutes = require("./routes/assistant");
+const moduleRoutes = require("./routes/modules");
 const {
   router: desktopRoutes,
   hashToken,
@@ -45,6 +46,7 @@ app.get("/api/health", async (_req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/assistant", assistantRoutes);
+app.use("/api/modules", moduleRoutes);
 
 async function runDeviceTest(req, res, commandType, payload = {}) {
   try {
@@ -97,7 +99,6 @@ async function runDeviceTest(req, res, commandType, payload = {}) {
 
 app.post("/api/desktop/ping", authMiddleware, (req, res) => runDeviceTest(req, res, "ping"));
 app.post("/api/desktop/system-info", authMiddleware, (req, res) => runDeviceTest(req, res, "get_system_info"));
-undefined
 app.use("/api/desktop", desktopRoutes);
 
 app.get("/api/auth/me", authMiddleware, async (req, res) => {
