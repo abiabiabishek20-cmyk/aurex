@@ -31,6 +31,21 @@ async function ensureAssistantTables() {
     on assistant_messages(conversation_id, created_at asc)
   `);
   await query(`
+    create table if not exists assistant_memories (
+      id uuid primary key,
+      user_id uuid not null references users(id) on delete cascade,
+      content text not null,
+      category text not null default 'general',
+      source text not null default 'assistant',
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+  await query(`
+    create index if not exists assistant_memories_user_updated_idx
+    on assistant_memories(user_id, updated_at desc)
+  `);
+  await query(`
     create table if not exists assistant_pending_actions (
       id uuid primary key,
       user_id uuid not null references users(id) on delete cascade,
@@ -46,6 +61,25 @@ async function ensureAssistantTables() {
     create index if not exists assistant_pending_actions_user_status_idx
     on assistant_pending_actions(user_id, status, created_at desc)
   `);
+}
+async function saveMemory(userId, content, category = "general") {
+  const value = String(content || "").trim().slice(0, 2000);
+  if (!value) throw new Error("Memory content is required.");
+  const id = crypto.randomUUID();
+  await query(
+    "insert into assistant_memories (id, user_id, content, category) values ($1, $2, $3, $4)",
+    [id, userId, value, String(category || "general").trim().slice(0, 80) || "general"]
+  );
+  return id;
+}
+async function searchMemories(userId, queryText, limit = 8) {
+  const q = String(queryText || "").trim().slice(0, 500);
+  if (!q) return [];
+  const result = await query(
+    "select id, content, category, created_at, updated_at from assistant_memories where user_id = $1 and content ilike $2 order by updated_at desc limit $3",
+    [userId, "%" + q + "%", Math.min(Math.max(Number(limit) || 8, 1), 20)]
+  );
+  return result.rows;
 }
 async function createConversation(userId, title = "Aurex Chat") {
   const id = crypto.randomUUID();
@@ -80,4 +114,4 @@ async function consumePendingAction(userId, actionId) {
   const result = await query(`update assistant_pending_actions set status = 'confirmed' where id = $1 and user_id = $2 and status = 'pending' and expires_at > now() returning id, conversation_id, tool_name, arguments`, [actionId, userId]);
   return result.rows[0] || null;
 }
-module.exports = { ensureAssistantTables, createConversation, getConversation, getOrCreateConversation, loadMessages, addMessage, createPendingAction, consumePendingAction };
+module.exports = { ensureAssistantTables, saveMemory, searchMemories, createConversation, getConversation, getOrCreateConversation, loadMessages, addMessage, createPendingAction, consumePendingAction };
