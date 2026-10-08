@@ -1,8 +1,10 @@
 const { query } = require("../db");
 const { createPendingAction } = require("./store");
 const { executeDesktopCommand } = require("../routes/desktop");
+const { runResearch } = require("./research");
 
 const TOOL_DEFINITIONS = [
+  { type: "function", name: "research_web", description: "Research a topic using current web information and return a concise sourced synthesis.", parameters: { type: "object", properties: { query: { type: "string", description: "The research question or topic." } }, required: ["query"], additionalProperties: false }, strict: true },
   { type: "function", name: "get_pc_status", description: "Check whether the user's paired Windows PC is online and report its latest heartbeat.", parameters: { type: "object", properties: {}, additionalProperties: false }, strict: true },
   { type: "function", name: "ping_pc", description: "Ping the user's paired Windows PC to verify that the desktop agent responds.", parameters: { type: "object", properties: {}, additionalProperties: false }, strict: true },
   { type: "function", name: "get_system_info", description: "Read safe system diagnostics from the user's paired Windows PC, such as RAM, CPU cores, OS, architecture, hostname and uptime.", parameters: { type: "object", properties: {}, additionalProperties: false }, strict: true },
@@ -22,6 +24,7 @@ async function latestDevice(userId) {
   return result.rows[0] || null;
 }
 async function runAssistantTool({ userId, conversationId, name, args, confirmed = false }) {
+  if (name === "research_web") return runResearch({ userId, query: String(args?.query || "").slice(0, 1000) });
   if (name === "get_pc_status") {
     const device = await latestDevice(userId);
     if (!device) return { ok: false, message: "No paired desktop device found." };
