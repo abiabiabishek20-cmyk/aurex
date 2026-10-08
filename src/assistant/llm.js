@@ -2,7 +2,9 @@ const OPENAI_URL = "https://api.openai.com/v1/responses";
 const { runAssistantTool, TOOL_DEFINITIONS } = require("./tools");
 const { personaInstructions } = require("./persona");
 
-const SYSTEM_INSTRUCTIONS = `
+const SYSTEM_INSTRUCTIONS = personaInstructions() + `
+
+
 You are Aurex, a personal AI assistant for the authenticated owner.
 
 Language and style:
@@ -57,7 +59,7 @@ async function runAssistant({ userId, conversationMessages, userMessage, convers
       model: process.env.AUREX_MODEL || "gpt-6-luna",
       instructions: SYSTEM_INSTRUCTIONS,
       input,
-      tools: TOOL_DEFINITIONS,
+      tools: [...TOOL_DEFINITIONS, { type: "web_search" }],
       tool_choice: "auto",
       parallel_tool_calls: false,
       max_output_tokens: 1200,
