@@ -7,6 +7,7 @@ const TOOL_DEFINITIONS = [
   { type: "function", name: "remember", description: "Save a useful user-approved fact or preference to Aurex private memory. Use only when the user explicitly asks you to remember/save something.", parameters: { type: "object", properties: { content: { type: "string", description: "The fact or preference to remember." }, category: { type: "string", description: "Short category such as preference, project, workflow, or general." } }, required: ["content"], additionalProperties: false }, strict: true },
   { type: "function", name: "recall_memory", description: "Search Aurex private long-term memory for information relevant to the user's request.", parameters: { type: "object", properties: { query: { type: "string", description: "A concise phrase to search for." } }, required: ["query"], additionalProperties: false }, strict: true },
   { type: "function", name: "research_web", description: "Research a topic using current web information and return a concise sourced synthesis.", parameters: { type: "object", properties: { query: { type: "string", description: "The research question or topic." } }, required: ["query"], additionalProperties: false }, strict: true },
+  { type: "function", name: "create_plan", description: "Turn a user's requested project or task into a safe, structured execution plan. Planning only: do not create files, deploy, send messages, or change external state.", parameters: { type: "object", properties: { request: { type: "string", description: "The user's project or task request." }, goal: { type: "string", description: "Optional concise desired outcome." } }, required: ["request"], additionalProperties: false }, strict: true },
   { type: "function", name: "get_pc_status", description: "Check whether the user's paired Windows PC is online and report its latest heartbeat.", parameters: { type: "object", properties: {}, additionalProperties: false }, strict: true },
   { type: "function", name: "ping_pc", description: "Ping the user's paired Windows PC to verify that the desktop agent responds.", parameters: { type: "object", properties: {}, additionalProperties: false }, strict: true },
   { type: "function", name: "get_system_info", description: "Read safe system diagnostics from the user's paired Windows PC, such as RAM, CPU cores, OS, architecture, hostname and uptime.", parameters: { type: "object", properties: {}, additionalProperties: false }, strict: true },
@@ -26,6 +27,30 @@ async function latestDevice(userId) {
   return result.rows[0] || null;
 }
 async function runAssistantTool({ userId, conversationId, name, args, confirmed = false }) {
+  if (name === "create_plan") {
+    const request = String(args?.request || "").trim().slice(0, 2000);
+    if (!request) return { ok: false, message: "A planning request is required." };
+    const goal = String(args?.goal || "").trim().slice(0, 500) || request;
+    const lower = request.toLowerCase();
+    const phases = [];
+    if (/(app|website|web|software|project|code|create|build)/.test(lower)) {
+      phases.push(
+        { id: 1, title: "Understand", actions: ["Clarify the requested outcome, constraints, inputs and success criteria."] },
+        { id: 2, title: "Design", actions: ["Define architecture, screens or components, data flow and safe tool boundaries."] },
+        { id: 3, title: "Build", actions: ["Implement the smallest working slice with isolated, reviewable changes."] },
+        { id: 4, title: "Verify", actions: ["Run available tests, inspect errors and verify the requested behavior."] },
+        { id: 5, title: "Deliver", actions: ["Prepare the result and only perform external deployment or publishing after explicit confirmation."] }
+      );
+    } else {
+      phases.push(
+        { id: 1, title: "Understand", actions: ["Identify the desired outcome, constraints and success criteria."] },
+        { id: 2, title: "Plan", actions: ["Break the request into small, ordered steps and identify dependencies."] },
+        { id: 3, title: "Execute", actions: ["Carry out safe steps and keep external side effects behind confirmation."] },
+        { id: 4, title: "Verify", actions: ["Check the result against the success criteria and report anything incomplete."] }
+      );
+    }
+    return { ok: true, planning_only: true, goal, request, phases };
+  }
   if (name === "research_web") return runResearch({ userId, query: String(args?.query || "").slice(0, 1000) });
   if (name === "remember") {
     const id = await saveMemory(userId, args?.content, args?.category);
