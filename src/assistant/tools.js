@@ -1,9 +1,11 @@
 const { query } = require("../db");
-const { createPendingAction } = require("./store");
+const { createPendingAction, saveMemory, searchMemories } = require("./store");
 const { executeDesktopCommand } = require("../routes/desktop");
 const { runResearch } = require("./research");
 
 const TOOL_DEFINITIONS = [
+  { type: "function", name: "remember", description: "Save a useful user-approved fact or preference to Aurex private memory. Use only when the user explicitly asks you to remember/save something.", parameters: { type: "object", properties: { content: { type: "string", description: "The fact or preference to remember." }, category: { type: "string", description: "Short category such as preference, project, workflow, or general." } }, required: ["content"], additionalProperties: false }, strict: true },
+  { type: "function", name: "recall_memory", description: "Search Aurex private long-term memory for information relevant to the user's request.", parameters: { type: "object", properties: { query: { type: "string", description: "A concise phrase to search for." } }, required: ["query"], additionalProperties: false }, strict: true },
   { type: "function", name: "research_web", description: "Research a topic using current web information and return a concise sourced synthesis.", parameters: { type: "object", properties: { query: { type: "string", description: "The research question or topic." } }, required: ["query"], additionalProperties: false }, strict: true },
   { type: "function", name: "get_pc_status", description: "Check whether the user's paired Windows PC is online and report its latest heartbeat.", parameters: { type: "object", properties: {}, additionalProperties: false }, strict: true },
   { type: "function", name: "ping_pc", description: "Ping the user's paired Windows PC to verify that the desktop agent responds.", parameters: { type: "object", properties: {}, additionalProperties: false }, strict: true },
@@ -25,6 +27,14 @@ async function latestDevice(userId) {
 }
 async function runAssistantTool({ userId, conversationId, name, args, confirmed = false }) {
   if (name === "research_web") return runResearch({ userId, query: String(args?.query || "").slice(0, 1000) });
+  if (name === "remember") {
+    const id = await saveMemory(userId, args?.content, args?.category);
+    return { ok: true, memory_id: id, message: "Saved to Aurex private memory." };
+  }
+  if (name === "recall_memory") {
+    const memories = await searchMemories(userId, args?.query, 8);
+    return { ok: true, memories };
+  }
   if (name === "get_pc_status") {
     const device = await latestDevice(userId);
     if (!device) return { ok: false, message: "No paired desktop device found." };
