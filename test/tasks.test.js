@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { normalizeTaskInput } = require("../src/assistant/tasks");
+const { normalizeTaskInput } = require("../src/assistant/task-validation");
 
 test("task input normalizes valid task fields", () => {
   const task = normalizeTaskInput({
