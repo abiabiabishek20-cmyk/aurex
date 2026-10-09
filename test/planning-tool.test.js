@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { runAssistantTool } = require("../src/assistant/planner");
+const { createPlan } = require("../src/assistant/planner");
 
 test("create_plan returns an ordered plan for app creation", async () => {
   const result = await createPlan({ request: "Create a website for my photography studio", goal: "Working studio website" });
