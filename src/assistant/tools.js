@@ -4,12 +4,14 @@ const { executeDesktopCommand } = require("../routes/desktop");
 const { runResearch } = require("./research");
 const { listTasks, createTask, updateTask } = require("./tasks");
 const { createPlan } = require("./planner");
+const { generateProjectBlueprint } = require("./create");
 
 const TOOL_DEFINITIONS = [
   { type: "function", name: "remember", description: "Save a useful user-approved fact or preference to Aurex private memory. Use only when the user explicitly asks you to remember/save something.", parameters: { type: "object", properties: { content: { type: "string", description: "The fact or preference to remember." }, category: { type: "string", description: "Short category such as preference, project, workflow, or general." } }, required: ["content"], additionalProperties: false }, strict: true },
   { type: "function", name: "recall_memory", description: "Search Aurex private long-term memory for information relevant to the user's request.", parameters: { type: "object", properties: { query: { type: "string", description: "A concise phrase to search for." } }, required: ["query"], additionalProperties: false }, strict: true },
   { type: "function", name: "research_web", description: "Research a topic using current web information and return a concise sourced synthesis.", parameters: { type: "object", properties: { query: { type: "string", description: "The research question or topic." } }, required: ["query"], additionalProperties: false }, strict: true },
   { type: "function", name: "create_plan", description: "Turn a user's requested project or task into a safe, structured execution plan. Planning only: do not create files, deploy, send messages, or change external state.", parameters: { type: "object", properties: { request: { type: "string", description: "The user's project or task request." }, goal: { type: "string", description: "Optional concise desired outcome." } }, required: ["request"], additionalProperties: false }, strict: true },
+  { type: "function", name: "create_project_blueprint", description: "Generate starter source files in memory for a website or Node.js API. This does not write files to disk, create a GitHub repository, or deploy anything.", parameters: { type: "object", properties: { type: { type: "string", enum: ["website", "node-api"] }, name: { type: "string" }, description: { type: "string" } }, required: ["type", "name", "description"], additionalProperties: false }, strict: true },
   { type: "function", name: "create_task", description: "Create a task in the user's private Aurex task manager. This only stores a task in Aurex; it does not execute external actions.", parameters: { type: "object", properties: { title: { type: "string", description: "Short task title." }, description: { type: "string", description: "Optional task details." }, priority: { type: "string", enum: ["low", "normal", "high"] }, due_at: { type: ["string", "null"], description: "Optional due date/time in ISO-8601 format, or null." } }, required: ["title", "description", "priority", "due_at"], additionalProperties: false }, strict: true },
   { type: "function", name: "list_tasks", description: "List tasks from the user's private Aurex task manager, optionally filtered by status.", parameters: { type: "object", properties: { status: { type: ["string", "null"], enum: ["pending", "in_progress", "completed", "cancelled", null] } }, required: ["status"], additionalProperties: false }, strict: true },
   { type: "function", name: "update_task_status", description: "Update the status of a task that belongs to the user in Aurex task manager.", parameters: { type: "object", properties: { task_id: { type: "string", description: "ID of the task to update." }, status: { type: "string", enum: ["pending", "in_progress", "completed", "cancelled"] } }, required: ["task_id", "status"], additionalProperties: false }, strict: true },
@@ -33,6 +35,7 @@ async function latestDevice(userId) {
 }
 async function runAssistantTool({ userId, conversationId, name, args, confirmed = false }) {
   if (name === "create_plan") return createPlan(args);
+  if (name === "create_project_blueprint") return generateProjectBlueprint(args);
   if (name === "research_web") return runResearch({ userId, query: String(args?.query || "").slice(0, 1000) });
   if (name === "create_task") {
     const task = await createTask(userId, { title: args?.title, description: args?.description, priority: args?.priority, due_at: args?.due_at || null });
