@@ -1,5 +1,3 @@
-const path = require("path");
-
 const PROJECT_TYPES = new Set(["website", "node-api"]);
 
 function safeProjectName(value) {
@@ -72,13 +70,13 @@ ${description}
 
 ## Run locally
 
-Open `index.html` in a browser or use a local static file server.
+Open index.html in a browser or use a local static file server.
 
 ## Files
 
-- `index.html`: semantic page structure
-- `styles.css`: responsive visual styling
-- `app.js`: small interaction layer
+- index.html: semantic page structure
+- styles.css: responsive visual styling
+- app.js: small interaction layer
 
 This is a starter scaffold, not a production-ready deployment. Review accessibility, content, and browser behavior before publishing.
 `
@@ -104,7 +102,7 @@ app.use(express.json({ limit: "100kb" }));
 app.get("/health", (_req, res) => res.json({ ok: true, service: "${name}" }));
 app.get("/", (_req, res) => res.json({ name: "${name}", description: ${JSON.stringify(description)} }));
 
-app.listen(port, () => console.log(`Server listening on port ${port}`));
+app.listen(port, () => console.log("Server listening on port " + port));
 `,
       "test/health.test.js": `const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -130,14 +128,14 @@ ${description}
 ## Setup
 
 1. Install Node.js 20 or newer.
-2. Run `npm install`.
-3. Copy `.env.example` to a local `.env` if needed.
-4. Run `npm start`.
+2. Run npm install.
+3. Copy .env.example to a local .env if needed.
+4. Run npm start.
 
 ## Endpoints
 
-- `GET /`: service information
-- `GET /health`: health check
+- GET /: service information
+- GET /health: health check
 
 Never commit real secrets. Add authentication, validation, logging, and integration tests before exposing this service publicly.
 `
