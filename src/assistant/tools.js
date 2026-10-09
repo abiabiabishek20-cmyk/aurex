@@ -2,12 +2,16 @@ const { query } = require("../db");
 const { createPendingAction, saveMemory, searchMemories } = require("./store");
 const { executeDesktopCommand } = require("../routes/desktop");
 const { runResearch } = require("./research");
+const { listTasks, createTask, updateTask } = require("./tasks");
 
 const TOOL_DEFINITIONS = [
   { type: "function", name: "remember", description: "Save a useful user-approved fact or preference to Aurex private memory. Use only when the user explicitly asks you to remember/save something.", parameters: { type: "object", properties: { content: { type: "string", description: "The fact or preference to remember." }, category: { type: "string", description: "Short category such as preference, project, workflow, or general." } }, required: ["content"], additionalProperties: false }, strict: true },
   { type: "function", name: "recall_memory", description: "Search Aurex private long-term memory for information relevant to the user's request.", parameters: { type: "object", properties: { query: { type: "string", description: "A concise phrase to search for." } }, required: ["query"], additionalProperties: false }, strict: true },
   { type: "function", name: "research_web", description: "Research a topic using current web information and return a concise sourced synthesis.", parameters: { type: "object", properties: { query: { type: "string", description: "The research question or topic." } }, required: ["query"], additionalProperties: false }, strict: true },
   { type: "function", name: "create_plan", description: "Turn a user's requested project or task into a safe, structured execution plan. Planning only: do not create files, deploy, send messages, or change external state.", parameters: { type: "object", properties: { request: { type: "string", description: "The user's project or task request." }, goal: { type: "string", description: "Optional concise desired outcome." } }, required: ["request"], additionalProperties: false }, strict: true },
+  { type: "function", name: "create_task", description: "Create a task in the user's private Aurex task manager. This only stores a task in Aurex; it does not execute external actions.", parameters: { type: "object", properties: { title: { type: "string", description: "Short task title." }, description: { type: "string", description: "Optional task details." }, priority: { type: "string", enum: ["low", "normal", "high"] }, due_at: { type: ["string", "null"], description: "Optional due date/time in ISO-8601 format, or null." } }, required: ["title", "description", "priority", "due_at"], additionalProperties: false }, strict: true },
+  { type: "function", name: "list_tasks", description: "List tasks from the user's private Aurex task manager, optionally filtered by status.", parameters: { type: "object", properties: { status: { type: ["string", "null"], enum: ["pending", "in_progress", "completed", "cancelled", null] } }, required: ["status"], additionalProperties: false }, strict: true },
+  { type: "function", name: "update_task_status", description: "Update the status of a task that belongs to the user in Aurex task manager.", parameters: { type: "object", properties: { task_id: { type: "string", description: "ID of the task to update." }, status: { type: "string", enum: ["pending", "in_progress", "completed", "cancelled"] } }, required: ["task_id", "status"], additionalProperties: false }, strict: true },
   { type: "function", name: "get_pc_status", description: "Check whether the user's paired Windows PC is online and report its latest heartbeat.", parameters: { type: "object", properties: {}, additionalProperties: false }, strict: true },
   { type: "function", name: "ping_pc", description: "Ping the user's paired Windows PC to verify that the desktop agent responds.", parameters: { type: "object", properties: {}, additionalProperties: false }, strict: true },
   { type: "function", name: "get_system_info", description: "Read safe system diagnostics from the user's paired Windows PC, such as RAM, CPU cores, OS, architecture, hostname and uptime.", parameters: { type: "object", properties: {}, additionalProperties: false }, strict: true },
@@ -52,6 +56,19 @@ async function runAssistantTool({ userId, conversationId, name, args, confirmed 
     return { ok: true, planning_only: true, goal, request, phases };
   }
   if (name === "research_web") return runResearch({ userId, query: String(args?.query || "").slice(0, 1000) });
+  if (name === "create_task") {
+    const task = await createTask(userId, { title: args?.title, description: args?.description, priority: args?.priority, due_at: args?.due_at || null });
+    return { ok: true, task, message: "Task saved in Aurex Manager." };
+  }
+  if (name === "list_tasks") {
+    const tasks = await listTasks(userId, args?.status || null);
+    return { ok: true, tasks };
+  }
+  if (name === "update_task_status") {
+    const task = await updateTask(userId, args?.task_id, { status: args?.status });
+    if (!task) return { ok: false, message: "Task not found." };
+    return { ok: true, task, message: "Task status updated." };
+  }
   if (name === "remember") {
     const id = await saveMemory(userId, args?.content, args?.category);
     return { ok: true, memory_id: id, message: "Saved to Aurex private memory." };
