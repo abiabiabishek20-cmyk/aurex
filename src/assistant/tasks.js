@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const { query } = require("../db");
+const { normalizeTaskInput } = require("./task-validation");
 
 async function ensureTaskTable() {
   await query(`
@@ -19,22 +20,6 @@ async function ensureTaskTable() {
   await query(`create index if not exists assistant_tasks_user_status_updated_idx on assistant_tasks(user_id, status, updated_at desc)`);
 }
 
-function normalizeTaskInput(input = {}) {
-  const title = String(input.title || "").trim().slice(0, 180);
-  const description = String(input.description || "").trim().slice(0, 3000);
-  const status = String(input.status || "pending");
-  const priority = String(input.priority || "normal");
-  if (!title) throw new Error("Task title is required.");
-  if (!["pending", "in_progress", "completed", "cancelled"].includes(status)) throw new Error("Invalid task status.");
-  if (!["low", "normal", "high"].includes(priority)) throw new Error("Invalid task priority.");
-  let dueAt = null;
-  if (input.due_at) {
-    const parsed = new Date(input.due_at);
-    if (Number.isNaN(parsed.getTime())) throw new Error("Invalid due_at date.");
-    dueAt = parsed.toISOString();
-  }
-  return { title, description, status, priority, dueAt };
-}
 
 async function listTasks(userId, status = null) {
   const validStatus = status && ["pending", "in_progress", "completed", "cancelled"].includes(status) ? status : null;
@@ -99,4 +84,4 @@ async function deleteTask(userId, taskId) {
   return Boolean(result.rows[0]);
 }
 
-module.exports = { ensureTaskTable, listTasks, createTask, updateTask, deleteTask, normalizeTaskInput };
+module.exports = { ensureTaskTable, listTasks, createTask, updateTask, deleteTask };
