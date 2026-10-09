@@ -61,6 +61,8 @@ async function createTask(userId, input) {
 }
 
 async function updateTask(userId, taskId, input) {
+  const existing = await query("select status from assistant_tasks where id = $1 and user_id = $2 limit 1", [taskId, userId]);
+  if (!existing.rows[0]) return null;
   const fields = [];
   const values = [taskId, userId];
   const allowed = {
@@ -77,9 +79,11 @@ async function updateTask(userId, taskId, input) {
     fields.push(columns[key] + " = $" + values.length);
   }
   if (!fields.length) throw new Error("No task fields to update.");
+  const nextStatus = Object.prototype.hasOwnProperty.call(input || {}, "status") ? String(input.status) : existing.rows[0].status;
+  if (!["pending", "in_progress", "completed", "cancelled"].includes(nextStatus)) throw new Error("Invalid task status.");
+  values.push(nextStatus);
+  fields.push("completed_at = case when $" + values.length + " = 'completed' then coalesce(completed_at, now()) else null end");
   fields.push("updated_at = now()");
-  fields.push("completed_at = case when $" + (values.length + 1) + " = 'completed' then coalesce(completed_at, now()) when $" + (values.length + 1) + " is distinct from 'completed' then null else completed_at end");
-  values.push((input && input.status) ? String(input.status) : "");
   const result = await query(
     `update assistant_tasks set ${fields.join(", ")} where id = $1 and user_id = $2 returning id, title, description, status, priority, due_at, created_at, updated_at, completed_at`,
     values
