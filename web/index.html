@@ -86,7 +86,7 @@ $('brainConfirmBtn').onclick=async()=>{
     catch(error){byId('taskManagerNotice').textContent=error.message}
     finally{button.disabled=false;button.textContent='Add Task'}
   });
-  document.addEventListener('aurex:authenticated',loadTasks);
+  window.addEventListener('aurex:authenticated',loadTasks);
   if(localStorage.getItem('aurex_jwt')) loadTasks();
 })();
 </script>
