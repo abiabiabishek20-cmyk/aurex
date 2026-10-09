@@ -52,7 +52,31 @@ async function callOpenAI(body) {
   }
   return data;
 }
+function offlineReadOnlyShortcut(message) {
+  const text = String(message || "").toLowerCase().replace(/[?!.]/g, " ").replace(/\\s+/g, " ").trim();
+  if (/^(en )?(oda |my )?pc (online ah|online ah|online|status enna|status)$/.test(text) || /^(is )?(my )?pc online$/.test(text) || /pc online ah/.test(text)) return "get_pc_status";
+  if (/^(en )?(pc|system) (system info|details|information|ram details)$/.test(text) || /^(get )?(pc|system) (info|information|details)$/.test(text) || /evlo ram/.test(text)) return "get_system_info";
+  if (/^(ping|ping pc|ping device|pc ping)$/.test(text)) return "ping_pc";
+  return null;
+}
+
 async function runAssistant({ userId, conversationMessages, userMessage, conversationId }) {
+  const shortcutTool = offlineReadOnlyShortcut(userMessage);
+  if (shortcutTool) {
+    const result = await runAssistantTool({ userId, conversationId, name: shortcutTool, args: {} });
+    let reply;
+    if (shortcutTool === "get_pc_status") {
+      if (!result.ok) reply = result.message || "PC status-ai retrieve panna mudiyala.";
+      else if (result.device?.online) reply = `Aama Sir, unga PC online-la irukku. Last heartbeat ${result.device.last_seen_age_seconds ?? "unknown"} seconds munnaadi. (Verified from Aurex device status.)`;
+      else reply = `Sir, unga PC ippo offline-aa irukkalaam. Last heartbeat age: ${result.device?.last_seen_age_seconds ?? "unknown"} seconds.`;
+    } else if (shortcutTool === "get_system_info") {
+      if (!result.ok) reply = result.message || "System information retrieve panna mudiyala.";
+      else reply = "System info command complete aachu. Dashboard Command Result-la details paarunga.";
+    } else {
+      reply = result.ok ? "Ping command complete aachu; dashboard Command Result-la status verify pannunga." : (result.message || "Ping fail aachu.");
+    }
+    return { reply, artifacts: [], actions: [], model: "aurex-local-shortcut" };
+  }
   let input = [...conversationMessages.map(row => ({ role: row.role, content: row.content })), { role: "user", content: userMessage }];
   const artifacts = [];
   const actions = [];
