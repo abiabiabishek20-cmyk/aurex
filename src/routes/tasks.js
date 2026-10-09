@@ -28,6 +28,7 @@ router.post("/", async (req, res) => {
 });
 
 router.patch("/:id", async (req, res) => {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id)) return res.status(400).json({ error: "Invalid task ID." });
   try {
     const task = await updateTask(req.user.sub, req.params.id, req.body || {});
     if (!task) return res.status(404).json({ error: "Task not found." });
@@ -40,6 +41,7 @@ router.patch("/:id", async (req, res) => {
 });
 
 router.delete("/:id", async (req, res) => {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.id)) return res.status(400).json({ error: "Invalid task ID." });
   try {
     const deleted = await deleteTask(req.user.sub, req.params.id);
     if (!deleted) return res.status(404).json({ error: "Task not found." });
