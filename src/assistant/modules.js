@@ -6,7 +6,7 @@ const MODULES = Object.freeze([
   { id: "create", name: "AUREX CREATE", capability: "Digital product creation", state: "planned" },
   { id: "content", name: "AUREX CONTENT", capability: "Social content workflows", state: "planned" },
   { id: "automation", name: "AUREX AUTOMATION", capability: "Safe computer & workflow automation", state: "active" },
-  { id: "manager", name: "AUREX MANAGER", capability: "Tasks & multi-step coordination", state: "active" }
+  { id: "manager", name: "AUREX MANAGER", capability: "Task planning & multi-step coordination", state: "in_progress" }
 ]);
 
 function getModules() {
