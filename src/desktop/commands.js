@@ -2,7 +2,8 @@ const COMMAND_DEFINITIONS = Object.freeze({
   ping: { payload: "empty" },
   get_system_info: { payload: "empty" },
   open_url: { payload: "open_url" },
-  capture_screenshot: { payload: "empty" }
+  capture_screenshot: { payload: "empty" },
+  ollama_chat: { payload: "ollama_chat" }
 });
 
 const MAX_PAYLOAD_BYTES = 8192;
@@ -32,6 +33,22 @@ function validateCommand(commandType, rawPayload = {}) {
       return { ok: false, error: `${type} does not accept a payload` };
     }
     return { ok: true, payload: {} };
+  }
+
+  if (definition.payload === "ollama_chat") {
+    const messages = payload.messages;
+    if (!Array.isArray(messages) || messages.length < 1 || messages.length > 8) {
+      return { ok: false, error: "ollama_chat requires 1 to 8 messages" };
+    }
+    const clean = [];
+    for (const item of messages) {
+      if (!isPlainObject(item) || !["system", "user", "assistant"].includes(item.role) ||
+          typeof item.content !== "string" || !item.content.trim() || item.content.length > 1200) {
+        return { ok: false, error: "Invalid Ollama chat message" };
+      }
+      clean.push({ role: item.role, content: item.content });
+    }
+    return { ok: true, payload: { messages: clean } };
   }
 
   if (definition.payload === "open_url") {
