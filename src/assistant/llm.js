@@ -60,6 +60,17 @@ function offlineReadOnlyShortcut(message) {
   return null;
 }
 
+async function localOllamaFallback({ userId, conversationMessages, userMessage, conversationId }) {
+  const messages = [
+    { role: "system", content: "You are Aurex, a private personal AI assistant. Reply naturally in the user's language; understand Tamil and Tanglish. Be truthful about capabilities and never claim actions you did not perform. Do not ask for passwords, API keys, or tokens." },
+    ...conversationMessages.slice(-6).map(row => ({ role: row.role, content: String(row.content || "").slice(0, 1000) })),
+    { role: "user", content: String(userMessage || "").slice(0, 1000) }
+  ].slice(-8);
+  const result = await runAssistantTool({ userId, conversationId, name: "local_ollama_chat", args: { messages } });
+  if (!result.ok) throw new Error(result.message || "Local Ollama fallback failed.");
+  return { reply: result.reply, artifacts: [], actions: [], model: result.model || "qwen2.5:3b" };
+}
+
 async function runAssistant({ userId, conversationMessages, userMessage, conversationId }) {
   const shortcutTool = offlineReadOnlyShortcut(userMessage);
   if (shortcutTool) {
@@ -81,17 +92,24 @@ async function runAssistant({ userId, conversationMessages, userMessage, convers
   const artifacts = [];
   const actions = [];
   for (let round = 0; round < 4; round += 1) {
-    const response = await callOpenAI({
-      model: process.env.AUREX_MODEL || "gpt-6-luna",
-      instructions: SYSTEM_INSTRUCTIONS,
-      input,
-      tools: [...TOOL_DEFINITIONS, { type: "web_search" }],
-      tool_choice: "auto",
-      parallel_tool_calls: false,
-      max_output_tokens: 1200,
-      store: false,
-      safety_identifier: String(userId)
-    });
+    let response;
+    try {
+      response = await callOpenAI({
+        model: process.env.AUREX_MODEL || "gpt-6-luna",
+        instructions: SYSTEM_INSTRUCTIONS,
+        input,
+        tools: [...TOOL_DEFINITIONS, { type: "web_search" }],
+        tool_choice: "auto",
+        parallel_tool_calls: false,
+        max_output_tokens: 1200,
+        store: false,
+        safety_identifier: String(userId)
+      });
+    } catch (error) {
+      const quotaOrConfig = error.code === "OPENAI_NOT_CONFIGURED" || error.status === 401 || error.status === 429 || /quota|credit|billing|insufficient/i.test(error.message || "");
+      if (quotaOrConfig && !shortcutTool) return await localOllamaFallback({ userId, conversationMessages, userMessage, conversationId });
+      throw error;
+    }
     const calls = (response.output || []).filter(item => item.type === "function_call");
     if (!calls.length) return { reply: extractOutputText(response) || "I’m here, partner. What should we do next?", artifacts, actions, model: response.model || process.env.AUREX_MODEL || "gpt-6-luna" };
     input = [...input, ...(response.output || [])];
