@@ -59,3 +59,8 @@ Client → register/login → PostgreSQL user lookup → bcrypt hash/verificatio
 - Refresh-token/session rotation when long-lived sessions are needed
 - HttpOnly secure cookies for browser sessions where appropriate
 - Audit logging and monitoring
+
+
+## Local Ollama fallback (optional)
+
+The cloud assistant can fall back to Ollama on the paired Windows PC when the OpenAI key is missing, invalid, rate-limited, or out of quota. This requires Ollama to be running locally and the authenticated Aurex Desktop Agent to be connected to this API. The agent calls only `http://127.0.0.1:11434`; do not expose Ollama's port to the internet. Set `AUREX_OLLAMA_MODEL=qwen2.5:3b` in the desktop agent's local `.env` only if you want to override the default model. The fallback supports chat only; cloud tool-calling and web research still require the configured cloud AI provider. If the PC/agent is offline, the API cannot reach the local model.
