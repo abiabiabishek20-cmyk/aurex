@@ -89,6 +89,25 @@ async function execute(command) {
     case "capture_screenshot":
       return await captureScreenshot();
 
+    case "ollama_chat": {
+      const response = await fetch("http://127.0.0.1:11434/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: process.env.AUREX_OLLAMA_MODEL || "qwen2.5:3b",
+          messages: command.payload?.messages || [],
+          stream: false,
+          options: { num_predict: 500 }
+        }),
+        signal: AbortSignal.timeout(12000)
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.error || `Local Ollama returned HTTP ${response.status}`);
+      const content = String(data?.message?.content || "").trim();
+      if (!content) throw new Error("Local Ollama returned an empty response");
+      return { model: data.model || process.env.AUREX_OLLAMA_MODEL || "qwen2.5:3b", content };
+    }
+
     default:
       throw new Error("Command type is not allowed by this agent");
   }
