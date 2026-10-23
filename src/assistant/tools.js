@@ -34,6 +34,17 @@ async function latestDevice(userId) {
   return result.rows[0] || null;
 }
 async function runAssistantTool({ userId, conversationId, name, args, confirmed = false }) {
+  if (name === "local_ollama_chat") {
+    const device = await latestDevice(userId);
+    if (!device) return { ok: false, message: "Local Ollama fallback needs your paired PC Desktop Agent online." };
+    const messages = Array.isArray(args?.messages) ? args.messages : [];
+    const result = await executeDesktopCommand(userId, device.id, "ollama_chat", { messages }, 15000);
+    const response = result.command?.result;
+    if (!result.ok || !response?.content) {
+      return { ok: false, message: result.error || response?.error || "Local Ollama did not respond. Check Ollama and the Aurex Desktop Agent on your PC." };
+    }
+    return { ok: true, reply: response.content, model: response.model || "qwen2.5:3b" };
+  }
   if (name === "create_plan") return createPlan(args);
   if (name === "create_project_blueprint") return generateProjectBlueprint(args);
   if (name === "research_web") return runResearch({ userId, query: String(args?.query || "").slice(0, 1000) });
