@@ -99,7 +99,7 @@ async function execute(command) {
           stream: false,
           options: { num_predict: 500 }
         }),
-        signal: AbortSignal.timeout(12000)
+        signal: AbortSignal.timeout(55000)
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.error || `Local Ollama returned HTTP ${response.status}`);
