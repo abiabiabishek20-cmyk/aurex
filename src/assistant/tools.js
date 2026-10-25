@@ -38,7 +38,7 @@ async function runAssistantTool({ userId, conversationId, name, args, confirmed 
     const device = await latestDevice(userId);
     if (!device) return { ok: false, message: "Local Ollama fallback needs your paired PC Desktop Agent online." };
     const messages = Array.isArray(args?.messages) ? args.messages : [];
-    const result = await executeDesktopCommand(userId, device.id, "ollama_chat", { messages }, 15000);
+    const result = await executeDesktopCommand(userId, device.id, "ollama_chat", { messages }, 60000);
     const response = result.command?.result;
     if (!result.ok || !response?.content) {
       return { ok: false, message: result.error || response?.error || "Local Ollama did not respond. Check Ollama and the Aurex Desktop Agent on your PC." };
