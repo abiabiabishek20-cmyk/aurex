@@ -126,7 +126,7 @@ async function executeDesktopCommand(userId, deviceId, commandType, rawPayload =
   await requeueStaleCommands(deviceId);
   await dispatchNextQueuedCommand(deviceId);
 
-  const deadline = Date.now() + Math.max(1000, Math.min(timeoutMs, 15000));
+  const deadline = Date.now() + Math.max(1000, Math.min(timeoutMs, 60000));
   while (Date.now() < deadline) {
     const result = await query(
       "select id, command_type, status, result, created_at, completed_at from desktop_commands where id = $1 and device_id = $2 and user_id = $3 limit 1",
