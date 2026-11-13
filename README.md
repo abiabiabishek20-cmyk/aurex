@@ -19,7 +19,12 @@ DATABASE_URL=your_supabase_connection_string
 JWT_SECRET=your_long_random_secret
 JWT_EXPIRES_IN=1h
 DATABASE_SSL=true
+AUREX_OWNER_EMAIL=your_owner_email@example.com
+OPENAI_API_KEY=your_openai_api_key
+AUREX_MODEL=gpt-6-luna
 ```
+
+`AUREX_OWNER_EMAIL` is required to enable registration and should be set to the single owner's existing account email in Render. When configured, login is restricted to that email. If it is missing, new registrations fail closed; existing login remains available so a missing setting does not unexpectedly lock out an already-created owner account. `OPENAI_API_KEY` is optional when the paired desktop agent and local Ollama are available; cloud web research and cloud tool-calling require the provider key. Keep all real values in the hosting provider's environment settings, never in Git.
 
 Never commit `.env` or real secrets to GitHub.
 
@@ -45,6 +50,8 @@ Production uses `npm start`.
 - `DATABASE_SSL=true`
 - `JWT_EXPIRES_IN=1h`
 - `NODE_ENV=production`
+- `AUREX_OWNER_EMAIL` — the one owner's existing account email
+- `OPENAI_API_KEY` — optional cloud AI provider key; omit only when relying on local Ollama fallback
 
 After these are set, `/api/health` should return `ok: true` with `database: "connected"`.
 
