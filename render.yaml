@@ -14,3 +14,9 @@ services:
         value: "true"
       - key: JWT_EXPIRES_IN
         value: 1h
+      - key: AUREX_OWNER_EMAIL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: AUREX_MODEL
+        value: gpt-6-luna
