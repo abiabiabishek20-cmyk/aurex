@@ -22,7 +22,7 @@ function speakReply(text){
   }
   window.speechSynthesis.cancel();
   const utterance=new SpeechSynthesisUtterance(value);
-  utterance.lang=/[\\u0B80-\\u0BFF]/.test(value)?'ta-IN':'en-IN';
+  utterance.lang=/[\u0B80-\u0BFF]/.test(value)?'ta-IN':'en-IN';
   utterance.rate=1;
   utterance.onstart=()=>{$('voiceStatus').textContent='Aurex is speaking...'};
   utterance.onend=()=>{$('voiceStatus').textContent='Voice reply finished.'};
