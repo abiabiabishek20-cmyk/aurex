@@ -1,6 +1,7 @@
 const OPENAI_URL = "https://api.openai.com/v1/responses";
 const { runAssistantTool, TOOL_DEFINITIONS } = require("./tools");
 const { personaInstructions } = require("./persona");
+const { offlineReadOnlyShortcut } = require("./shortcuts");
 
 const SYSTEM_INSTRUCTIONS = personaInstructions() + `
 
@@ -25,6 +26,7 @@ Tool and safety rules:
 - If a requested capability is not available yet, explain that it is being built rather than pretending it exists.
 
 Aurex is being built as a tool-using assistant. For actions that require confirmation, clearly tell the user what will happen and ask them to confirm.
+- For social-media copy requests, use create_content_draft to return a structured draft; never publish or send it.
 `;
 
 function extractOutputText(response) {
@@ -52,14 +54,6 @@ async function callOpenAI(body) {
   }
   return data;
 }
-function offlineReadOnlyShortcut(message) {
-  const text = String(message || "").toLowerCase().replace(/[?!.\\-]/g, " ").replace(/\\s+/g, " ").trim();
-  if (/^(en )?(oda |my )?pc (online ah|online|status enna|status)$/.test(text) || /^(is )?(my )?pc online$/.test(text) || /pc online ah/.test(text) || /^en pc online ah$/.test(text)) return "get_pc_status";
-  if (/^(en )?(pc|system) (system info|details|information|ram details)$/.test(text) || /^(get )?(pc|system) (info|information|details)$/.test(text) || /evlo ram/.test(text)) return "get_system_info";
-  if (/^(ping|ping pc|ping device|pc ping)$/.test(text)) return "ping_pc";
-  return null;
-}
-
 async function localOllamaFallback({ userId, conversationMessages, userMessage, conversationId }) {
   const messages = [
     { role: "system", content: "You are Aurex, a private personal AI assistant. Reply naturally in the user's language; understand Tamil and Tanglish. Be truthful about capabilities and never claim actions you did not perform. Do not ask for passwords, API keys, or tokens." },

@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const { query } = require("../db");
 const { recordAudit } = require("../audit");
+const { evaluateOwnerRegistration } = require("../auth/owner-policy");
 
 const router = express.Router();
 const authAttempts = new Map();
@@ -43,6 +44,11 @@ router.post("/register", async (req, res) => {
     if (!allowAuth(req, "register", REGISTER_LIMIT)) return res.status(429).json({ error: "Registration rate limit exceeded", retry_after_seconds: 900 });
     const email = String(req.body.email || "").trim().toLowerCase();
     const password = String(req.body.password || "");
+    const ownerPolicy = evaluateOwnerRegistration(email, process.env.AUREX_OWNER_EMAIL);
+    if (!ownerPolicy.ok) {
+      await recordAudit({ eventType: "auth.register.rejected", metadata: { reason: ownerPolicy.code } });
+      return res.status(ownerPolicy.status).json({ error: ownerPolicy.error });
+    }
 
     if (!email || password.length < 8) {
       await recordAudit({ eventType: "auth.register.rejected", metadata: { reason: "invalid_input" } });
@@ -89,6 +95,11 @@ router.post("/login", async (req, res) => {
     if (!allowAuth(req, "login", LOGIN_LIMIT)) return res.status(429).json({ error: "Login rate limit exceeded", retry_after_seconds: 900 });
     const email = String(req.body.email || "").trim().toLowerCase();
     const password = String(req.body.password || "");
+    const configuredOwner = String(process.env.AUREX_OWNER_EMAIL || "").trim().toLowerCase();
+    if (configuredOwner && email !== configuredOwner) {
+      await recordAudit({ eventType: "auth.login.failure", metadata: { reason: "not_configured_owner" } });
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
 
     const result = await query(
       "select id, email, password_hash, created_at from users where lower(email) = lower($1) limit 1",
