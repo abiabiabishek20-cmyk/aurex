@@ -37,6 +37,7 @@ function extractOutputText(response) {
   return parts.join("\n").trim();
 }
 async function callOpenAI(body) {
+  if (!process.env.AUREX_MODEL) { const error = new Error("AUREX_MODEL is not configured on the server."); error.code = "AUREX_MODEL_NOT_CONFIGURED"; throw error; }
   if (!process.env.OPENAI_API_KEY) {
     const error = new Error("OPENAI_API_KEY is not configured on the Aurex server.");
     error.code = "OPENAI_NOT_CONFIGURED";
@@ -95,7 +96,7 @@ async function runAssistant({ userId, conversationMessages, userMessage, convers
     let response;
     try {
       response = await callOpenAI({
-        model: process.env.AUREX_MODEL || "gpt-6-luna",
+        model: process.env.AUREX_MODEL,
         instructions: SYSTEM_INSTRUCTIONS,
         input,
         tools: [...TOOL_DEFINITIONS, { type: "web_search" }],
@@ -107,11 +108,11 @@ async function runAssistant({ userId, conversationMessages, userMessage, convers
       });
     } catch (error) {
       const quotaOrConfig = error.code === "OPENAI_NOT_CONFIGURED" || error.status === 401 || error.status === 429 || /quota|credit|billing|insufficient/i.test(error.message || "");
-      if (quotaOrConfig && !shortcutTool) return await localOllamaFallback({ userId, conversationMessages, userMessage, conversationId });
+      if (quotaOrConfig && !shortcutTool && process.env.AUREX_CLOUD_ONLY !== "true") return await localOllamaFallback({ userId, conversationMessages, userMessage, conversationId });
       throw error;
     }
     const calls = (response.output || []).filter(item => item.type === "function_call");
-    if (!calls.length) return { reply: extractOutputText(response) || "I’m here, partner. What should we do next?", artifacts, actions, model: response.model || process.env.AUREX_MODEL || "gpt-6-luna" };
+    if (!calls.length) return { reply: extractOutputText(response) || "I’m here, Sir. What should we do next?", artifacts, actions, model: response.model || process.env.AUREX_MODEL };
     input = [...input, ...(response.output || [])];
     for (const call of calls) {
       let args = {};
@@ -127,6 +128,6 @@ async function runAssistant({ userId, conversationMessages, userMessage, convers
       input.push({ type: "function_call_output", call_id: call.call_id, output: JSON.stringify(result) });
     }
   }
-  return { reply: "I reached the tool-step limit for this request. Tell me the next step and I’ll continue.", artifacts, actions, model: process.env.AUREX_MODEL || "gpt-6-luna" };
+  return { reply: "I reached the tool-step limit for this request. Tell me the next step and I’ll continue.", artifacts, actions, model: process.env.AUREX_MODEL };
 }
 module.exports = { runAssistant };
