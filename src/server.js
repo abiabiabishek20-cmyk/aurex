@@ -100,7 +100,9 @@ async function runDeviceTest(req, res, commandType, payload = {}) {
   } catch (error) { console.error(error); return res.status(500).json({ error: `Could not run desktop ${commandType} test` }); }
 }
 
-const blockDesktopInCloudOnly = (_req, res, next) => process.env.AUREX_CLOUD_ONLY === "true" ? res.status(403).json({ error: "Desktop access is disabled in cloud-only mode." }) : next();\n\napp.post("/api/desktop/ping", blockDesktopInCloudOnly, authMiddleware, (req, res) => runDeviceTest(req, res, "ping"));
+const blockDesktopInCloudOnly = (_req, res, next) => process.env.AUREX_CLOUD_ONLY === "true" ? res.status(403).json({ error: "Desktop access is disabled in cloud-only mode." }) : next();
+
+app.post("/api/desktop/ping", blockDesktopInCloudOnly, authMiddleware, (req, res) => runDeviceTest(req, res, "ping"));
 app.post("/api/desktop/system-info", blockDesktopInCloudOnly, authMiddleware, (req, res) => runDeviceTest(req, res, "get_system_info"));
 app.use("/api/desktop", blockDesktopInCloudOnly, desktopRoutes);
 
