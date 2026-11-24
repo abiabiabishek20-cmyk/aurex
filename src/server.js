@@ -200,14 +200,32 @@ desktopWss.on("connection", async (ws, request) => {
   }
 });
 
-async function startServer() {
-  await ensureAuditTable();
-  await ensureAssistantTables();
-  await ensureTaskTable();
-  server.listen(PORT, () => console.log(`Aurex API running on http://localhost:${PORT}`));
+async function initializeDatabase() {
+  const delays = [0, 2000, 5000, 10000, 20000, 30000, 60000, 60000];
+  let lastError;
+  for (let attempt = 0; attempt < delays.length; attempt += 1) {
+    if (delays[attempt]) await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+    try {
+      await query("select 1");
+      await ensureAuditTable();
+      await ensureAssistantTables();
+      await ensureTaskTable();
+      console.log("Aurex database initialization complete.");
+      return true;
+    } catch (error) {
+      lastError = error;
+      console.error(`Aurex database initialization attempt ${attempt + 1} failed:`, error.message);
+    }
+  }
+  console.error("Aurex is serving its web UI, but database features remain unavailable:", lastError?.message || "unknown database error");
+  return false;
 }
 
-startServer().catch(error => {
-  console.error("Aurex startup failed:", error);
-  process.exit(1);
-});
+function startServer() {
+  server.listen(PORT, () => {
+    console.log(`Aurex API running on port ${PORT}`);
+    initializeDatabase().catch(error => console.error("Aurex database initialization failed:", error.message));
+  });
+}
+
+startServer();
