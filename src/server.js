@@ -39,7 +39,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: "100kb" }));
-app.use(express.static(path.join(__dirname, "../web")));
+app.use(express.static(path.join(__dirname, "../web"), { index: "cloud.html" }));
 
 app.get("/api/health", async (_req, res) => {
   try { await query("select 1"); res.json({ ok: true, service: "aurex-api", database: "connected", uptime_seconds: Math.floor(process.uptime()) }); }
