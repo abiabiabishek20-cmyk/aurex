@@ -39,7 +39,13 @@ router.post("/chat", async (req, res) => {
   } catch (error) {
     console.error("Aurex assistant chat error:", error);
     if (error.code === "OPENAI_NOT_CONFIGURED" || error.code === "AUREX_MODEL_NOT_CONFIGURED") return res.status(503).json({ error: error.message || "Aurex AI provider is not configured yet.", code: error.code });
-    res.status(500).json({ error: "Aurex Assistant is temporarily unavailable." });
+    if (error.code === "credit_balance_exhausted" || error.status === 429 && /no credits|credit balance|quota|billing/i.test(error.message || "")) {
+      return res.status(503).json({
+        error: "AUREX AI is temporarily out of provider credits. Your account, chat history and database are safe. AI replies will resume when an AI provider with available free or paid quota is connected.",
+        code: "AI_PROVIDER_CREDITS_EXHAUSTED"
+      });
+    }
+    res.status(500).json({ error: "Aurex Assistant is temporarily unavailable.", code: error.code || "ASSISTANT_UNAVAILABLE" });
   }
 });
 
