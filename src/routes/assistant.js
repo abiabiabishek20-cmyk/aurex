@@ -38,7 +38,7 @@ router.post("/chat", async (req, res) => {
     res.json({ ok: true, conversation_id: conversationId, reply: result.reply, actions: result.actions, artifacts: result.artifacts, model: result.model });
   } catch (error) {
     console.error("Aurex assistant chat error:", error);
-    if (error.code === "OPENAI_NOT_CONFIGURED") return res.status(503).json({ error: "Aurex AI provider is not configured yet.", code: "OPENAI_NOT_CONFIGURED" });
+    if (error.code === "OPENAI_NOT_CONFIGURED" || error.code === "AUREX_MODEL_NOT_CONFIGURED") return res.status(503).json({ error: error.message || "Aurex AI provider is not configured yet.", code: error.code });
     res.status(500).json({ error: "Aurex Assistant is temporarily unavailable." });
   }
 });
