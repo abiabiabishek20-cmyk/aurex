@@ -201,10 +201,8 @@ desktopWss.on("connection", async (ws, request) => {
 });
 
 async function initializeDatabase() {
-  const delays = [0, 2000, 5000, 10000, 20000, 30000, 60000, 60000];
-  let lastError;
-  for (let attempt = 0; attempt < delays.length; attempt += 1) {
-    if (delays[attempt]) await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+  let attempt = 0;
+  while (true) {
     try {
       await query("select 1");
       await ensureAuditTable();
@@ -213,12 +211,12 @@ async function initializeDatabase() {
       console.log("Aurex database initialization complete.");
       return true;
     } catch (error) {
-      lastError = error;
-      console.error(`Aurex database initialization attempt ${attempt + 1} failed:`, error.message);
+      attempt += 1;
+      const delayMs = attempt <= 7 ? Math.min(60000, 2000 * (2 ** (attempt - 1))) : 300000;
+      console.error(`Aurex database initialization attempt ${attempt} failed; retrying in ${Math.round(delayMs / 1000)}s:`, error.message);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
-  console.error("Aurex is serving its web UI, but database features remain unavailable:", lastError?.message || "unknown database error");
-  return false;
 }
 
 function startServer() {
