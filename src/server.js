@@ -33,7 +33,7 @@ app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");
-  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(self), geolocation=()");
   if (req.path.startsWith("/api/")) res.setHeader("Cache-Control", "no-store");
   if (process.env.NODE_ENV === "production") res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   next();
@@ -100,9 +100,9 @@ async function runDeviceTest(req, res, commandType, payload = {}) {
   } catch (error) { console.error(error); return res.status(500).json({ error: `Could not run desktop ${commandType} test` }); }
 }
 
-app.post("/api/desktop/ping", authMiddleware, (req, res) => runDeviceTest(req, res, "ping"));
-app.post("/api/desktop/system-info", authMiddleware, (req, res) => runDeviceTest(req, res, "get_system_info"));
-app.use("/api/desktop", desktopRoutes);
+const blockDesktopInCloudOnly = (_req, res, next) => process.env.AUREX_CLOUD_ONLY === "true" ? res.status(403).json({ error: "Desktop access is disabled in cloud-only mode." }) : next();\n\napp.post("/api/desktop/ping", blockDesktopInCloudOnly, authMiddleware, (req, res) => runDeviceTest(req, res, "ping"));
+app.post("/api/desktop/system-info", blockDesktopInCloudOnly, authMiddleware, (req, res) => runDeviceTest(req, res, "get_system_info"));
+app.use("/api/desktop", blockDesktopInCloudOnly, desktopRoutes);
 
 app.get("/api/auth/me", authMiddleware, async (req, res) => {
   try { const result = await query("select id, email, created_at from users where id = $1", [req.user.sub]); if (!result.rows[0]) return res.status(404).json({ error: "User not found" }); res.json({ user: result.rows[0] }); }
