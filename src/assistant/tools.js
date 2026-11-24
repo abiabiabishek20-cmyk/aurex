@@ -34,6 +34,9 @@ async function latestDevice(userId) {
   return result.rows[0] || null;
 }
 async function runAssistantTool({ userId, conversationId, name, args, confirmed = false }) {
+  const cloudOnly = process.env.AUREX_CLOUD_ONLY === "true";
+  const desktopOnlyTools = new Set(["local_ollama_chat", "get_pc_status", "ping_pc", "get_system_info", "capture_pc_screenshot", "open_url_on_pc"]);
+  if (cloudOnly && desktopOnlyTools.has(name)) return { ok: false, message: "This capability needs the optional AUREX PC Companion. Cloud-only mode does not access your personal computer." };
   if (name === "local_ollama_chat") {
     const device = await latestDevice(userId);
     if (!device) return { ok: false, message: "Local Ollama fallback needs your paired PC Desktop Agent online." };

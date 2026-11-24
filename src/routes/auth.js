@@ -43,6 +43,9 @@ router.post("/register", async (req, res) => {
     if (!allowAuth(req, "register", REGISTER_LIMIT)) return res.status(429).json({ error: "Registration rate limit exceeded", retry_after_seconds: 900 });
     const email = String(req.body.email || "").trim().toLowerCase();
     const password = String(req.body.password || "");
+    const ownerEmail = String(process.env.AUREX_OWNER_EMAIL || "").trim().toLowerCase();
+    if (!ownerEmail) return res.status(503).json({ error: "Owner-only registration is not configured on this server." });
+    if (email !== ownerEmail) return res.status(403).json({ error: "This private AUREX instance is restricted to its owner." });
 
     if (!email || password.length < 8) {
       await recordAudit({ eventType: "auth.register.rejected", metadata: { reason: "invalid_input" } });
@@ -89,6 +92,9 @@ router.post("/login", async (req, res) => {
     if (!allowAuth(req, "login", LOGIN_LIMIT)) return res.status(429).json({ error: "Login rate limit exceeded", retry_after_seconds: 900 });
     const email = String(req.body.email || "").trim().toLowerCase();
     const password = String(req.body.password || "");
+    const ownerEmail = String(process.env.AUREX_OWNER_EMAIL || "").trim().toLowerCase();
+    if (!ownerEmail) return res.status(503).json({ error: "Owner-only login is not configured on this server." });
+    if (email !== ownerEmail) return res.status(403).json({ error: "This private AUREX instance is restricted to its owner." });
 
     const result = await query(
       "select id, email, password_hash, created_at from users where lower(email) = lower($1) limit 1",

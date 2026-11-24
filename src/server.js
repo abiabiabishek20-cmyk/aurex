@@ -33,13 +33,13 @@ app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");
-  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(self), geolocation=()");
   if (req.path.startsWith("/api/")) res.setHeader("Cache-Control", "no-store");
   if (process.env.NODE_ENV === "production") res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   next();
 });
 app.use(express.json({ limit: "100kb" }));
-app.use(express.static(path.join(__dirname, "../web")));
+app.use(express.static(path.join(__dirname, "../web"), { index: "cloud.html" }));
 
 app.get("/api/health", async (_req, res) => {
   try { await query("select 1"); res.json({ ok: true, service: "aurex-api", database: "connected", uptime_seconds: Math.floor(process.uptime()) }); }
@@ -100,9 +100,11 @@ async function runDeviceTest(req, res, commandType, payload = {}) {
   } catch (error) { console.error(error); return res.status(500).json({ error: `Could not run desktop ${commandType} test` }); }
 }
 
-app.post("/api/desktop/ping", authMiddleware, (req, res) => runDeviceTest(req, res, "ping"));
-app.post("/api/desktop/system-info", authMiddleware, (req, res) => runDeviceTest(req, res, "get_system_info"));
-app.use("/api/desktop", desktopRoutes);
+const blockDesktopInCloudOnly = (_req, res, next) => process.env.AUREX_CLOUD_ONLY === "true" ? res.status(403).json({ error: "Desktop access is disabled in cloud-only mode." }) : next();
+
+app.post("/api/desktop/ping", blockDesktopInCloudOnly, authMiddleware, (req, res) => runDeviceTest(req, res, "ping"));
+app.post("/api/desktop/system-info", blockDesktopInCloudOnly, authMiddleware, (req, res) => runDeviceTest(req, res, "get_system_info"));
+app.use("/api/desktop", blockDesktopInCloudOnly, desktopRoutes);
 
 app.get("/api/auth/me", authMiddleware, async (req, res) => {
   try { const result = await query("select id, email, created_at from users where id = $1", [req.user.sub]); if (!result.rows[0]) return res.status(404).json({ error: "User not found" }); res.json({ user: result.rows[0] }); }
@@ -114,6 +116,7 @@ const server = http.createServer(app);
 const desktopWss = new WebSocketServer({ server, path: "/desktop/ws", maxPayload: 8 * 1024 * 1024 });
 
 desktopWss.on("connection", async (ws, request) => {
+  if (process.env.AUREX_CLOUD_ONLY === "true") return ws.close(1008, "Desktop access disabled in cloud-only mode");
   try {
     const auth = String(request.headers.authorization || "");
     const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";

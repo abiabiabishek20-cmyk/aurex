@@ -1,13 +1,14 @@
 const OPENAI_URL = "https://api.openai.com/v1/responses";
 
 async function runResearch({ userId, query }) {
+  if (!process.env.AUREX_MODEL) return { ok: false, message: "AUREX_MODEL is not configured on the Aurex server." };
   if (!process.env.OPENAI_API_KEY) return { ok: false, message: "Web research is not configured yet." };
   if (!query.trim()) return { ok: false, message: "Research query is required." };
   const response = await fetch(OPENAI_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
     body: JSON.stringify({
-      model: process.env.AUREX_MODEL || "gpt-6-luna",
+      model: process.env.AUREX_MODEL,
       instructions: "Research the user query using current web information. Give a concise synthesis and include source URLs when available. Do not invent facts or sources.",
       input: query,
       tools: [{ type: "web_search" }],

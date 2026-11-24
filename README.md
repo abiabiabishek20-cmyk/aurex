@@ -1,66 +1,52 @@
-# Aurex API
+# AUREX — Private Cloud-First Personal AI
 
-Aurex v1 backend foundation with Node.js, Express, PostgreSQL/Supabase, bcrypt and JWT authentication.
+AUREX is a private, single-owner AI assistant. The cloud-first dashboard is served at the application root; no PC installation is required for chat, memory, research, planning and task management.
 
-## API
+## Current cloud capabilities
+- Owner-only registration and JWT login.
+- Tamil, Tanglish and English assistant conversations.
+- Persistent conversations and private memory tools.
+- Web research through the configured AI provider's web-search tool.
+- Task management, planning and starter project blueprints.
+- Browser-based push-to-talk speech recognition where supported, and spoken replies.
+- Optional PC Companion code remains in the repository for a future hybrid mode, but cloud-only mode blocks PC and local Ollama tools.
 
-- `GET /api/health` — database connectivity health check
-- `POST /api/auth/register` — create a user
-- `POST /api/auth/login` — authenticate and receive a JWT
-- `GET /api/auth/me` — authenticated user (`Authorization: Bearer <token>` required)
-
-## Environment
-
-Copy `.env.example` to `.env` and set:
+## Required environment
+Set these values in the hosting provider dashboard. Never commit real secrets.
 
 ```env
 PORT=3000
-DATABASE_URL=your_supabase_connection_string
-JWT_SECRET=your_long_random_secret
+DATABASE_URL=YOUR_SUPABASE_CONNECTION_STRING
+JWT_SECRET=YOUR_LONG_RANDOM_SECRET
 JWT_EXPIRES_IN=1h
 DATABASE_SSL=true
+NODE_ENV=production
+AUREX_OWNER_EMAIL=owner@example.com
+OPENAI_API_KEY=YOUR_SERVER_SIDE_AI_API_KEY
+AUREX_MODEL=YOUR_ENABLED_MODEL_ID
+AUREX_CLOUD_ONLY=true
 ```
 
-Never commit `.env` or real secrets to GitHub.
+AUREX_MODEL must be a model ID enabled for the API account. There is intentionally no guessed default model.
 
 ## Database
-
-Run `db/schema.sql` in Supabase SQL Editor/PostgreSQL. The API expects the `users` table used by the auth routes.
+Run `db/schema.sql` in Supabase SQL Editor. The service creates its assistant, task and audit tables during startup.
 
 ## Run
-
 ```bash
 npm install
-npm run dev
+npm start
 ```
 
-Production uses `npm start`.
+## Deployment
+The Render blueprint in `render.yaml` configures the Node web service. Add every required environment variable in Render, connect Supabase, and verify `/api/health` after deployment. The service cannot be considered live until a real owner login and assistant request have been tested.
 
-## Render deployment
+## Security
+- Configure `AUREX_OWNER_EMAIL` before allowing registration.
+- Keep API keys and database credentials on the server only.
+- Keep the repository private before storing proprietary source code.
+- Use HTTPS and private database/storage policies.
+- Review `docs/CLOUD_FIRST_ARCHITECTURE.md` and `docs/CLOUD_ONLY_DEPLOYMENT.md`.
 
-`render.yaml` configures the Aurex web service. Required Render environment variables are:
-
-- `DATABASE_URL` — Supabase PostgreSQL connection string
-- `JWT_SECRET` — long random JWT signing secret
-- `DATABASE_SSL=true`
-- `JWT_EXPIRES_IN=1h`
-- `NODE_ENV=production`
-
-After these are set, `/api/health` should return `ok: true` with `database: "connected"`.
-
-## Authentication flow
-
-Client → register/login → PostgreSQL user lookup → bcrypt hash/verification → JWT → `Authorization: Bearer <token>` → JWT middleware → protected route.
-
-## Next production hardening
-
-- Email verification and password reset
-- Rate limiting
-- Refresh-token/session rotation when long-lived sessions are needed
-- HttpOnly secure cookies for browser sessions where appropriate
-- Audit logging and monitoring
-
-
-## Local Ollama fallback (optional)
-
-The cloud assistant can fall back to Ollama on the paired Windows PC when the OpenAI key is missing, invalid, rate-limited, or out of quota. This requires Ollama to be running locally and the authenticated Aurex Desktop Agent to be connected to this API. The agent calls only `http://127.0.0.1:11434`; do not expose Ollama's port to the internet. Set `AUREX_OLLAMA_MODEL=qwen2.5:3b` in the desktop agent's local `.env` only if you want to override the default model. The fallback supports chat only; cloud tool-calling and web research still require the configured cloud AI provider. If the PC/agent is offline, the API cannot reach the local model.
+## Limitations
+Cloud-only AUREX cannot control the owner's local desktop, read local files, launch installed apps, run local Ollama, or work offline. Browser voice support varies. AI and speech provider usage can incur charges. Website automation requires a separately configured isolated cloud browser worker and is not implied by the current desktop bridge.
