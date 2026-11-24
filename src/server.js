@@ -114,6 +114,7 @@ const server = http.createServer(app);
 const desktopWss = new WebSocketServer({ server, path: "/desktop/ws", maxPayload: 8 * 1024 * 1024 });
 
 desktopWss.on("connection", async (ws, request) => {
+  if (process.env.AUREX_CLOUD_ONLY === "true") return ws.close(1008, "Desktop access disabled in cloud-only mode");
   try {
     const auth = String(request.headers.authorization || "");
     const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
